@@ -1,0 +1,109 @@
+---
+title: "The Hazard Data Landscape of a Global Chemical Inventory"
+date: last-modified
+format:
+  docx:
+    toc: false
+  pdf:
+    toc: false
+bibliography: references.bib
+csl: environmental-science-and-technology.csl
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+ 
+# Figure 1
+
+```{r}
+knitr::include_graphics(
+  here::here(
+    "outputs",
+    "figures",
+    "combined.png"
+  )
+)
+```
+
+**Figure 1.** Coverage of toxicity and assessment information across the ROCKS global chemical collection. (A) Overall distribution of ROCKS chemicals (n = 238,602) by presence of quantitative human health assessment values, experimental toxicity data without assessment values, or no experimental toxicity data from any evidence stream. Toxicity data is defined as inclusive of in vivo, targeted bioactivity, and broad profiling. (B) Availability and overlap of experimental toxicity evidence streams among chemicals with toxicity data. Bars indicate the number of chemicals represented by each evidence-stream combination and connected points denote the contributing data types. Dark blue segments indicate chemicals that also have an assessment value. Labels show percentage of the total inventory within each category (inclusive of assessment values and toxicity data). (C) Coverage of assessment values and toxicity data across use sectors. Stacked bars show the percentage of chemicals within each sector assigned to one of the three data availability categories. Numbers in parentheses indicate the total number of chemicals assigned to each sector. Chemicals lacking a sector assignment are shown by the matrix in which they were measured (Unknown - Biomonitoring and Unknown - Environmental (Env.) Monitoring).
+
+# Figure 2
+
+```{r}
+knitr::include_graphics(
+  here::here(
+    "outputs",
+    "figures",
+    "rocks_depth_threshold_pct_by_sector.png"
+  )
+)
+```
+
+**Figure 2.** Depth of toxicological evidence across sectors. Percentages indicate the proportion of chemicals within each sector meeting increasing data thresholds (dose response summary values (DRSVs); targeted in vitro assay endpoints; unique broad profiling points of departure (PODs)). The black line on the in vivo panel indicates the percentage of chemicals within each sector that have at least one human health assessment value. Percentages are calculated relative to the total number of chemicals assigned to each sector. Chemicals may contribute to more than one sector where multiple use categories were assigned. Chemicals lacking a sector assignment are shown by the matrix in which they were measured (Unknown - Biomonitoring and Unknown - Environmental (Env.) Monitoring).
+
+# Figure 3
+
+```{r}
+knitr::include_graphics(
+  here::here(
+    "outputs",
+    "figures",
+    "fig03_combined.png"
+  )
+)
+```
+
+**Figure 3.** Distribution of dose-based potency estimates across major chemical classes. (A) Coverage of the ROCKS collection by potency metric. (B) Distribution of chemical-level potency values for 5th percentile in vivo-derived human equivalent doses (p05 eBMDHED) and NAM-derived administered equivalent doses (minimum AED; minimum of AED from targeted bioactivity and broad profiling) among chemicals with both metrics. Potency values are shown on a log10 dose scale, where lower values indicate greater potency. (C) Distribution of potency by ClassyFire chemical classes; limited to classes containing at least 20 overlapping chemicals; sample sizes are indicated on the x-axis. Open circles and vertical black bars represent the median and interquartile range, respectively, of quantitative human health assessment values available within each chemical class. Classes are ordered by the median assessment value.
+
+# Figure 4
+
+```{r}
+knitr::include_graphics(
+  here::here("outputs","figures", "ghs_selected_hazards_by_sector_heatmap.png")
+  )
+```
+
+**Figure 4.** Selected GHS health hazard classifications by sector. Heatmap showing the percentage of chemicals within each sector assigned to selected chronic GHS health hazard categories. STOT-RE = specific target organ toxicity-repeated exposure. Chemicals lacking a sector assignment are shown by the matrix in which they were measured (Unknown - Biomonitoring and Unknown - Environmental (Env.) Monitoring). D = Danger; W = Warning (based on GHS health code). 
+
+# Figure 5
+
+```{r}
+knitr::include_graphics(
+  here::here(
+    "outputs",
+    "figures",
+    "fig05_dcap.png"
+  )
+)
+```
+
+**Figure 5.** Sector-specific coverage of oral general population human health assessment values and the added contribution of Database Calibrated Assessment Process (DCAP) Calibrated Toxicity Values. Percentage of chemicals within each use sector assigned at least one oral assessment value. Light blue bars indicate coverage from traditional assessment values, and dark blue segments indicate additional coverage provided by DCAP values for chemicals lacking a traditional assessment value. Sector labels show the number of chemicals assigned to each sector within the inventory. Chemicals lacking a sector assignment are shown by the matrix in which they were measured (Unknown - Biomonitoring and Unknown - Environmental (Env.) Monitoring).
+
+# Figure 6
+
+```{r}
+knitr::include_graphics(
+  here::here(
+    "outputs",
+    "figures",
+    "fig06_combined.png"
+  )
+)
+```
+
+**Figure 6.** Structural analogue availability across the global inventory. (A) Coverage of Morgan fingerprint descriptors among chemicals in the inventory. (B) Percentage of target chemicals with at least one qualifying source analogue (defined as repeat dose in vivo dose response summary values) as a function of the Jaccard similarity threshold. (C) Distribution of analogue counts for target chemicals at Jaccard similarity threshold ≥0.7. Bars show the percentage of target chemicals with at least the indicated minimum number of source analogues.
+
+# Figure 7
+
+```{r}
+knitr::include_graphics(
+  here::here(
+    "outputs",
+    "figures",
+    "fig7_allpanels_06sept2026.png"
+  )
+)
+```
+
+**Figure 7.** Using the ROCKS collection to fill hazard data gaps. (A) The count of chemical entities with predicted physicochemical properties from OPERA v2.9 that are relevant to predicting chemicals most likely to be amenable to aqueous-based in vitro models for endocrine bioactivity, including Henry’s Law Constant (HLC), LogP, Vapor Pressure (VP), and Water Solubility (Water Sol). For each predicted property, the count of chemicals inside and outside the OPERA AD are indicated, along with the chemicals for which no prediction can be made due to a lack of QSAR-amenable structure. (B) The intersection of ROCKS chemicals predicted to be screening amenable for endocrine bioactivity assays, positive in silico model predictions (for CERAPP or COMPARA), and availability of the ToxCast ER and AR pathway model results reveals a set of 50,220 chemicals that represent priority screening candidates for applying endocrine bioactivity assays. (C) A densMAP representation informed by Morgan fingerprints of the ROCKS collection chemicals with known structure is color-coded by probable sector of use. On top of this representation, a set of 500 diverse picks (in blue) are visualized, comprised of 25 chemicals from 20 clusters (indicated by numbers), with the medoid of each cluster indicated by a star.

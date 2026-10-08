@@ -1,0 +1,1502 @@
+---
+title: "Endocrine Screening Analysis for ROCKS"
+toc: true
+toc-depth: 3
+author: "Katie Paul Friedman"
+date: "`r Sys.Date()`"
+format: docx
+editor: visual
+echo: true
+---
+
+# Purpose
+Here, the analysis to understand how ROCKS can be employed to identify potential screening candidates for ER and AR is provided. This is in Figure 7 of Weitekamp et al.
+
+```{r setup, include=FALSE}
+library(DBI)
+library(duckdb)
+library(data.table)
+library(fastcluster)
+library(flextable)
+library(ggplot2)
+library(ggrepel)
+library(ggupset)
+library(grid)
+library(gridExtra)
+library(httr)
+library(httr2)
+library(jsonlite)
+library(dplyr)
+library(Matrix)
+library(openxlsx)
+library(RcppAnnoy)
+library(tibble)
+library(tidyr)
+library(usethis)
+library(uwot)
+library(viridis)
+
+```
+
+Read in Rdata from source.
+
+```{r, warning=FALSE}
+load(file = "./source/er_ar_summary_input_06sept26.RData")
+```
+
+# Using Predicted Properties to Determine Screening Candidates {.tabset .tabset-pills}
+The concept is to provide a rapid means of narrowing down the screening candidate list to fill specific gaps in endocrine screening and identify the chemicals that are easiest to screen.
+
+## OPERA v2.9 Coverage
+
+Using OPERA v2.9, express coverage of important properties for amenability. Visualization: create a bar chart of property coverage in rocks_amenability
+
+First, how many chemicals have no defined molecular formula?
+
+```{r no-mol-form, warning=FALSE}
+
+# how many rows in rocks_amenability are chemicals without structures?
+## quantify by counting the number of cichem with no mol_formula in rocks_chemistry
+length(unique(rocks_chemistry[is.na(mol_formula), cichem]))
+
+```
+
+Next, prepare data for making a bar chart of property coverage in rocks_amenability. For each property, count the number of chemicals that have a defined value for that property.
+
+
+```{r count-opera-preds, warning=FALSE}
+
+# create a data.table with the counts of cichem where the logp, logp_ad, vp, vp_ad, hl, hl_ad, ws, ws_ad, are TRUE, FALSE, or NA, using rocks_amenability table
+
+# Select only the columns you want to check
+cols_to_check <- names(rocks_amenability)[names(rocks_amenability) %like% "_ad"]
+
+ad_counts <- rbindlist(lapply(cols_to_check, function(col) {
+  tbl <- table(rocks_amenability[[col]], useNA = "always")
+  data.table(
+    column = col,
+    value  = names(tbl),
+    count  = as.integer(tbl)
+  )
+}))
+
+
+# order ad_counts so that TRUE, FALSE, and then NA using factors
+ad_counts[, value := factor(value, levels = c("TRUE", "FALSE", NA), exclude = NULL)]
+ad_counts[, text_color := fcase(
+  value == "TRUE",  "white",
+  value == "FALSE", "black",
+  is.na(value),     "black"
+)]
+
+```
+
+Make a bar chart of ad_counts using ggplot2.
+
+```{r ulri-colors, warning=FALSE}
+
+# Note that ULRI has special colors
+ULcolors <- c(
+  "#122C49", #1
+  "#000095", #2
+  "#0A32FF", #3
+  "#00689C", #4
+  "#577E9E", #5
+  "#00CAFB", #6
+  "#BCE4F7", #7
+  "#123A28", #8
+  "#00948F", #9
+  "#00A451", #10
+  "#58595B", #11
+  "#B38874", #12
+  "#E5DDCA", #13
+  "#5B0428", #14
+  "#98443D", #15
+  "#CA0123", #16
+  "#FF6255", #17
+  "#FF9D55"  #18
+)
+
+```
+
+```{r, warning=FALSE}
+# Remove the NAs because ggplot2 didn't like it when I tried to change the legend from NA to No Prediction
+ad_counts <- ad_counts %>%
+  mutate(value = factor(
+    ifelse(is.na(value), "No Prediction", as.character(value)),
+    levels = c("TRUE", "FALSE", "No Prediction")
+  ))
+
+```
+
+```{r, warning=FALSE}
+
+# make a bar chart of ad_counts using ggplot2
+
+fig_property_coverage <- ggplot(ad_counts, aes(x = column, y = count, fill = value)) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(
+    title = "",
+    x = "Predicted Physicochemical Properties",
+    y = "Chemical Count"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(
+    values = c("TRUE" = ULcolors[2], "FALSE" = ULcolors[7], "No Prediction" = "grey"),
+    labels = c("TRUE" = "Inside AD", "FALSE" = "Outside AD", "No Prediction" = "No Prediction"),
+    name   = "Applicability Domain (AD)"
+  ) +
+  geom_text(
+    stat = "identity",
+    position = position_stack(vjust = 0.5),
+    aes(label = count, color = value),
+    size = 3,
+    fontface = "bold"
+  ) +
+  scale_color_manual(
+    values = c("TRUE" = "white", "FALSE" = "black", "No Prediction" = "black"),
+    guide  = "none"
+  ) +
+  scale_x_discrete(labels = c(
+    "logp_ad" = "LogP",
+    "vp_ad"   = "VP",
+    "hl_ad"   = "HLC",
+    "ws_ad"   = "Water Sol"
+  ))
+
+fig_property_coverage
+```
+
+
+# Of these, how many are amenable to screening?
+
+Write the basic function to give a definition of in vitro screening amenability and put into rocks_amenability table.
+
+## Screening Amenability
+
+A little exploration on water solubility. how many chemicals have water solubility value less than 10uM, assuming OPERA units in log10-M?
+
+```{r exploration, warning=FALSE}
+
+# how many chemicals have water solubility value less than 10uM, assuming OPERA units in log10-M
+
+# calculate how many chemicals in rocks_amenability have water solubility less than water_sol_limit
+water_sol_limit <- log10(0.000010)
+
+ws_limit <- rocks_amenability[!is.na(ws) & ws < water_sol_limit]
+nrow(ws_limit)
+
+
+
+```
+
+Write the basic function to give a definition of in vitro screening amenability and put into rocks_amenability table. This is a coarse grain filter to identify the most screenable candidates, and could be further refined for a true implementation of picking screening candidates that also incorporates essential data streams such as exposure. This is a fairly permissive definition of screening amenability.
+
+```{r, warning=FALSE}
+
+# "Screening amenable" when: 
+# when average mass is not NA and greater than 100 and less than 600
+# logP is not NA and between -3 and 6, 
+# vapor pressure is not NA and greater than 1e-5, and half-life is not NA and less than 1000, then the chemical is amenable to in vitro screening. Otherwise, it is not amenable to in vitro screening.
+
+rocks_amenability[, in_vitro_screening_amenable := fcase(
+  # All three are NA - cannot determine
+  is.na(logp) & is.na(vp) & is.na(hl),
+  "UNKNOWN",
+
+  # All three AD flags are FALSE - cannot determine
+  !is.na(logp_ad) & logp_ad == FALSE &
+  !is.na(vp_ad)   & vp_ad == FALSE &
+  !is.na(hl_ad)   & hl_ad == FALSE,
+  "UNKNOWN",
+
+  # logP and VP are both NA - use HLC only
+  is.na(logp) & is.na(vp) & !is.na(hl),
+  fifelse(!is.na(hl_ad) & hl_ad == TRUE & hl > -3.0, "FALSE", "TRUE"),
+
+  # Standard case - logP and VP available, VP AD is valid
+  !is.na(average_mass) & average_mass > 100 &
+  !is.na(logp) & logp < 7 & !is.na(logp_ad) & logp_ad == TRUE &
+  !is.na(vp) & vp < 2 & !is.na(vp_ad) & vp_ad == TRUE,
+  "TRUE",
+
+  # Mass > 100, logP < 7, logP AD valid - ignore VP when VP AD is not valid
+  !is.na(average_mass) & average_mass > 100 &
+  !is.na(logp) & logp < 7 & !is.na(logp_ad) & logp_ad == TRUE &
+  (is.na(vp_ad) | vp_ad == FALSE),
+  "TRUE",
+
+  # Default - conditions not met
+  default = "FALSE"
+)]
+
+```
+
+## Create upset plot of chemicals that are amenable to screening, have in silico predictions, and have in vitro models
+
+```{r, warning=FALSE}
+
+# simplify data
+combined_endo_summary_classy[, any_positive := as.integer(any(c(agonist, antagonist, binding) == 1, na.rm = TRUE)), by = .(cichem_id, model)]
+
+combined_toxcast_summary[, any_positive := as.integer(any(c(agonist, antagonist) >= 0.1, na.rm = TRUE)), by = .(cichem_id, model)]
+
+# collapse to one row per cichem - any positive across all models
+endo_collapsed <- combined_endo_summary_classy[, .(
+  endo_any_positive    = as.integer(any(any_positive == 1, na.rm = TRUE)),
+  endo_model_available = as.integer(any(!is.na(agonist) | !is.na(antagonist) | !is.na(binding)))
+), by = cichem_id]
+
+toxcast_collapsed <- combined_toxcast_summary[, .(
+  toxcast_any_positive    = as.integer(any(any_positive >= 0.1, na.rm = TRUE)),
+  toxcast_model_available = as.integer(any(!is.na(agonist) | !is.na(antagonist)))
+), by = cichem_id]
+
+# merge
+
+upset_data <- merge(
+  rocks_amenability[, .(cichem, in_vitro_screening_amenable)],
+  endo_collapsed,
+  by.x = "cichem",
+  by.y = "cichem_id",
+  all.x = TRUE
+)
+
+upset_data <- merge(
+  upset_data,
+  toxcast_collapsed,
+  by.x = "cichem",
+  by.y = "cichem_id",
+  all.x = TRUE
+)
+
+```
+
+Reshape the data for plotting
+
+```{r, warning=FALSE}
+
+upset_data[, datasets := mapply(function(endo, toxcast, endo_avail, toxcast_avail, amenable) {
+  sets <- c()
+  
+  # amenability
+  if (!is.na(amenable) & amenable == "TRUE")               sets <- c(sets, "Predicted Screening Amenable")
+  if (!is.na(amenable) & amenable == "cannot determine")   sets <- c(sets, "Cannot Determine Amenability")
+  
+  # endo
+  if (!is.na(endo) & endo == 1)                  sets <- c(sets, "In Silico Model Positive")
+  else if (!is.na(endo_avail) & endo_avail == 1) sets <- c(sets, "In Silico Model Negative")
+  else                                           sets <- c(sets, "In Silico Model Not Available")
+  
+  # toxcast
+  if (!is.na(toxcast) & toxcast == 1)                      sets <- c(sets, "ToxCast Model Positive")
+  else if (!is.na(toxcast_avail) & toxcast_avail == 1)     sets <- c(sets, "ToxCast Model Negative")
+  
+
+  
+  list(sets)
+}, endo_any_positive, toxcast_any_positive, endo_model_available, toxcast_model_available, in_vitro_screening_amenable)]
+
+```
+
+```{r, warning=FALSE}
+
+upset_data[, `Screening Candidates` := fifelse(
+  sapply(datasets, function(x) {
+    "Predicted Screening Amenable" %in% x &
+    "In Silico Model Positive" %in% x &
+    !("Cannot Determine Amenability" %in% x) &
+    !("In Silico Model Negative" %in% x) &
+    !("ToxCast Model Positive" %in% x) &
+    !("ToxCast Model Negative" %in% x)
+  }),
+  "Screening Candidates",
+  "Other"
+)]
+
+```
+
+Decided just to indicate that ToxCast model is available, and that will reduce number of bars.
+
+```{r, warning=FALSE}
+# make ToxCast Model Positive and ToxCast Model Negative equal "ToxCast Model Available"
+upset_data2 <- upset_data[, datasets := lapply(datasets, function(x) {
+  if ("ToxCast Model Positive" %in% x | "ToxCast Model Negative" %in% x) {
+    x <- setdiff(x, c("ToxCast Model Positive", "ToxCast Model Negative"))
+    x <- c(x, "ToxCast Model Available")
+  }
+  return(x)
+})]
+
+```
+
+Need to inspect the data to see the chemicals that are not screening amenable but have ToxCast Model Positive or ToxCast Model Available (278 total)
+
+In general, the behaviors we see are:
++ substances with no structure
++ low MW or high logP substances
++ substances with OPERA AD failures is the predominant case
+
+
+```{r explore-nonamenable, warning=FALSE}
+
+inspect <- upset_data2[!sapply(datasets, function(x) {
+  "Predicted Screening Amenable" %in% x
+}) & sapply(datasets, function(x) {
+  "ToxCast Model Available" %in% x 
+}), .(cichem, datasets)]
+
+inspect <- rocks_chemistry[inspect, on = "cichem", .(cichem, primary_name, datasets)]
+
+inspect_full <- rocks_amenability[inspect, on = "cichem", .(
+  cichem,
+  primary_name,
+  datasets,
+  in_vitro_screening_amenable,
+  average_mass,
+  logp, logp_ad,
+  vp,   vp_ad,
+  hl,   hl_ad
+)]
+
+inspect_full
+
+```
+
+```{r, warning=FALSE}
+
+# count how many have in_vitro_screening_amenable=="FALSE" or "UNKNOWN" because of monoisotopic mass less than 100 or logP > 6
+# count the number of TRUE from this subset
+rocks_amenability[cichem %in% inspect$cichem & in_vitro_screening_amenable %in% c("FALSE", "UNKNOWN"), .(
+  mass_under_100  = sum(average_mass < 100,                                           na.rm = TRUE),
+  logp_over_6     = sum(logp > 6,                                                          na.rm = TRUE),
+  logp_ad_fail    = sum(is.na(logp_ad) | logp_ad == FALSE,                                 na.rm = TRUE),
+  vp_ad_fail      = sum(is.na(vp_ad)   | vp_ad == FALSE,                                   na.rm = TRUE),
+  hl_ad_fail      = sum(is.na(hl_ad)   | hl_ad == FALSE,                                   na.rm = TRUE),
+  all_ad_fail     = sum((is.na(logp_ad) | logp_ad == FALSE) &
+                        (is.na(vp_ad)   | vp_ad == FALSE)   &
+                        (is.na(hl_ad)   | hl_ad == FALSE),                                 na.rm = TRUE),
+
+  # Overlaps between mass/logp and AD failures
+  mass_and_logp               = sum(average_mass < 100 & logp > 6,                    na.rm = TRUE),
+  mass_and_logp_ad_fail       = sum(average_mass < 100 & (is.na(logp_ad) | logp_ad == FALSE), na.rm = TRUE),
+  mass_and_vp_ad_fail         = sum(average_mass < 100 & (is.na(vp_ad)   | vp_ad == FALSE),   na.rm = TRUE),
+  mass_and_hl_ad_fail         = sum(average_mass < 100 & (is.na(hl_ad)   | hl_ad == FALSE),   na.rm = TRUE),
+  mass_and_all_ad_fail        = sum(average_mass < 100 & (is.na(logp_ad) | logp_ad == FALSE) &
+                                                              (is.na(vp_ad)   | vp_ad == FALSE)   &
+                                                              (is.na(hl_ad)   | hl_ad == FALSE),   na.rm = TRUE),
+  logp_and_logp_ad_fail       = sum(logp > 6 & (is.na(logp_ad) | logp_ad == FALSE),               na.rm = TRUE),
+  logp_and_vp_ad_fail         = sum(logp > 6 & (is.na(vp_ad)   | vp_ad == FALSE),                 na.rm = TRUE),
+  logp_and_hl_ad_fail         = sum(logp > 6 & (is.na(hl_ad)   | hl_ad == FALSE),                 na.rm = TRUE),
+  logp_and_all_ad_fail        = sum(logp > 6 & (is.na(logp_ad) | logp_ad == FALSE) &
+                                               (is.na(vp_ad)   | vp_ad == FALSE)   &
+                                               (is.na(hl_ad)   | hl_ad == FALSE),                 na.rm = TRUE)
+)]
+```
+
+
+
+
+```{r, warning=FALSE}
+
+fig_upset <- ggplot(upset_data2, aes(x = datasets, fill = `Screening Candidates`)) +
+  geom_bar() +
+  geom_text(stat = "count", aes(label = after_stat(count)), 
+          vjust = -0.5, hjust = -0.1, angle = 45, size = 3) +
+  scale_x_upset() +
+  scale_y_log10(
+    breaks = c(1, 5, 10, 50, 100, 500, 1000, 5000, 10000, 50000, 100000),
+    labels = scales::comma,
+    expand = expansion(mult = c(0, 0.3))
+  ) +
+  scale_fill_manual(
+    values = c("Screening Candidates" = ULcolors[2], "Other" = ULcolors[7]),
+    name   = NULL
+  ) +
+  labs(
+    title = "",
+    x     = "Dataset Intersection",
+    y     = "Chemical Count"
+  ) +
+  theme_minimal() +
+  theme_combmatrix(combmatrix.label.text = element_text(size = 10))
+
+fig_upset
+
+```
+Make a version for Supplement that splits In Silico Model Negative and Positive into CERAPP and COMPARA (any mode). This addresses questions about how much COMPARA positives vs. CERAPP positives may drive the screening candidate list. This is a more complex upset plot, but it is informative - just too detailed for the main text of the paper which is not endocrine-focused per se.
+
+```{r upset-data-3, warning=FALSE}
+
+# collapse endo to one row per cichem PER MODEL (CERAPP vs COMPARA)
+endo_collapsed_by_model <- combined_endo_summary_classy[, .(
+  endo_any_positive    = as.integer(any(any_positive == 1, na.rm = TRUE)),
+  endo_model_available = as.integer(any(!is.na(agonist) | !is.na(antagonist) | !is.na(binding)))
+), by = .(cichem_id, model)]
+
+# reshape wide so each model becomes its own set of columns
+endo_wide <- dcast(
+  endo_collapsed_by_model,
+  cichem_id ~ model,
+  value.var = c("endo_any_positive", "endo_model_available"),
+  fill = NA
+)
+# this yields columns like:
+#   endo_any_positive_CERAPP, endo_any_positive_COMPARA,
+#   endo_model_available_CERAPP, endo_model_available_COMPARA
+
+
+# merge
+upset_data3 <- merge(
+  rocks_amenability[, .(cichem, in_vitro_screening_amenable)],
+  endo_wide,
+  by.x = "cichem",
+  by.y = "cichem_id",
+  all.x = TRUE
+)
+
+upset_data3 <- merge(
+  upset_data3,
+  toxcast_collapsed,
+  by.x = "cichem",
+  by.y = "cichem_id",
+  all.x = TRUE
+)
+```
+
+Reshape the data for plotting
+
+```{r, warning=FALSE}
+
+upset_data3[, datasets := mapply(function(cerapp, compara, toxcast,
+                                         cerapp_avail, compara_avail, toxcast_avail,
+                                         amenable) {
+  sets <- c()
+  
+  # amenability
+  if (!is.na(amenable) & amenable == "TRUE")               sets <- c(sets, "Predicted Screening Amenable")
+  if (!is.na(amenable) & amenable == "cannot determine")   sets <- c(sets, "Cannot Determine Amenability")
+  
+  # endo - CERAPP
+  if (!is.na(cerapp) & cerapp == 1)                        sets <- c(sets, "CERAPP Positive")
+  else if (!is.na(cerapp_avail) & cerapp_avail == 1)       sets <- c(sets, "CERAPP Negative")
+  
+  # endo - COMPARA
+  if (!is.na(compara) & compara == 1)                      sets <- c(sets, "COMPARA Positive")
+  else if (!is.na(compara_avail) & compara_avail == 1)     sets <- c(sets, "COMPARA Negative")
+  
+  # toxcast
+  if (!is.na(toxcast) & toxcast == 1)                      sets <- c(sets, "ToxCast Model Positive")
+  else if (!is.na(toxcast_avail) & toxcast_avail == 1)     sets <- c(sets, "ToxCast Model Negative")
+  
+  list(sets)
+}, endo_any_positive_CERAPP, endo_any_positive_COMPARA, toxcast_any_positive,
+   endo_model_available_CERAPP, endo_model_available_COMPARA, toxcast_model_available,
+   in_vitro_screening_amenable)]
+
+```
+
+```{r, warning=FALSE}
+
+# collapse ToxCast sets for plotting
+upset_data3[, datasets := lapply(datasets, function(x) {
+  if (any(c("ToxCast Model Positive", "ToxCast Model Negative") %in% x)) {
+    x <- c(setdiff(x, c("ToxCast Model Positive", "ToxCast Model Negative")),
+           "ToxCast Model Available")
+  }
+  x
+})]
+
+# candidate logic works regardless (checks both original and collapsed labels)
+upset_data3[, `Screening Candidates` := fifelse(
+  sapply(datasets, function(x) {
+    "Predicted Screening Amenable" %in% x &
+    ("CERAPP Positive" %in% x | "COMPARA Positive" %in% x) &
+    !any(c("ToxCast Model Positive", "ToxCast Model Negative", "ToxCast Model Available") %in% x)
+  }),
+  "Screening Candidates",
+  "Other"
+)]
+
+```
+
+```{r, warning=FALSE}
+
+fig_upset3 <- ggplot(upset_data3, aes(x = datasets, fill = `Screening Candidates`)) +
+  geom_bar() +
+  geom_text(stat = "count", aes(label = after_stat(count)), 
+          vjust = -0.5, hjust = -0.1, angle = 45, size = 3) +
+  scale_x_upset() +
+  scale_y_log10(
+    breaks = c(1, 5, 10, 50, 100, 500, 1000, 5000, 10000, 50000, 100000),
+    labels = scales::comma,
+    expand = expansion(mult = c(0, 0.3))
+  ) +
+  scale_fill_manual(
+    values = c("Screening Candidates" = ULcolors[2], "Other" = ULcolors[7]),
+    name   = NULL
+  ) +
+  labs(
+    title = "",
+    x     = "Dataset Intersection",
+    y     = "Chemical Count"
+  ) +
+  theme_minimal() +
+  theme_combmatrix(combmatrix.label.text = element_text(size = 10))
+
+fig_upset3
+
+```
+
+Combine fig_upset and fig_property_coverage into a single figure with two panels, A and B, then save as a tif.
+
+```{r, warning=FALSE, fig.width=7, fig.height=9}
+
+fig_combined <- grid.arrange(
+  arrangeGrob(fig_property_coverage, top = textGrob("A", x = 0, hjust = -0.5, gp = gpar(fontsize = 16, fontface = "bold"))),
+  arrangeGrob(fig_upset, top = textGrob("B", x = 0, hjust = -0.5, gp = gpar(fontsize = 16, fontface = "bold"))),
+  ncol = 1
+)
+
+# now save to ./output as tif at 300 dpi
+tiff("./output/fig7_06sept2026.tif", width = 7, height = 9, units = "in", res = 300)
+grid.draw(fig_combined)
+dev.off()
+
+# save supplemental version of the more complex upset plot (fig_upset3)
+tiff("./output/supp_fig_extended_upset_06sept2026.tif", width = 7, height = 7, units = "in", res = 300)
+grid.draw(fig_upset3)
+dev.off()
+
+
+```
+
+
+Get the screening candidates based on the dataset intersection created above.
++ No ToxCast Model Available
++ In Silico Positive (CERAPP or COMPARA)
++ Predicted Screening Amenable
+
+```{r screening-candidates, warning=FALSE}
+
+screening_candidates <- upset_data2[
+  sapply(datasets, function(x) {
+    "Predicted Screening Amenable" %in% x & 
+    "In Silico Model Positive" %in% x & 
+    #!"ToxCast Model Positive" %in% x &
+    #!"ToxCast Model Negative" %in% x
+      !"ToxCast Model Available" %in% x
+  })
+]
+
+screening_candidates_cichem <- screening_candidates$cichem
+
+```
+
+```{r, warning=FALSE, eval=FALSE}
+
+# save the screening_candidates table to a csv
+fwrite(screening_candidates, "./output/screening_candidates_06sept2026.csv")
+
+```
+
+
+# Representative Subset of Screening Candidates {.tabset .tabset-pills}
+
+Here we go through an exercise to demonstrate how to cluster the screening candidates based on their Morgan fingerprints. This is a demonstration of how to use the fingerprints to pick a subset of representative screening candidates.
+
+## Morgan Fingerprint clustering of this population of chemicals
+First make a fingerprint matrix - this is really big (50220 x 2048)
+
+```{r, warning=FALSE}
+
+# Subset rocks_morganfp to screening candidates only
+rocks_screening <- rocks_morganfp[cichem %in% screening_candidates_cichem]
+rocks_screening <- rocks_screening[!is.na(fp) & fp != ""]
+
+cat("Screening candidates with fingerprints:", nrow(rocks_screening), "\n")
+
+# Build matrix from the subset
+fp_strings <- rocks_screening$fp
+
+fp_matrix <- do.call(rbind, lapply(fp_strings, function(x) {
+  as.integer(strsplit(x, "")[[1]])
+}))
+
+rownames(fp_matrix) <- rocks_screening$cichem
+
+# Confirm
+cat("fp_matrix dimensions:", nrow(fp_matrix), "x", ncol(fp_matrix), "\n")
+
+```
+
+Build sparse matrix of Jaccard similarity.
+This is too intensive to run at rendering, so have saved the result for loading later.
+
+```{r, warning=FALSE, eval=FALSE}
+
+# Consider restarting R to clear memory
+
+# --- Subset to only the screening-candidate compounds --
+rocks_screening <- rocks_morganfp[cichem %in% screening_candidates_cichem]
+
+# Drop any compounds with a missing or empty fingerprint string, since those can't be converted into bit positions.
+rocks_screening <- rocks_screening[!is.na(fp) & fp != ""]
+
+# --- Set up the dimensions of the fingerprint matrix ---
+fp_strings  <- rocks_screening$fp     # vector of fingerprint strings, one per compound
+n_compounds <- length(fp_strings)     # number of rows in the final matrix (compounds)
+n_bits      <- 2048                   # number of columns (Morgan fingerprint bit length)
+
+cat("Building sparse matrix directly from fingerprint strings...\n")
+
+# Progress bar
+pb <- txtProgressBar(min = 0, max = n_compounds, style = 3)
+
+# --- Prepare storage for non-zero (i.e., "on") bit positions ---
+# A sparse matrix only stores the coordinates of the 1s. Instead of growing
+# vectors each iteration (slow, quadratic), we preallocate one list slot per
+# compound and fill it in, then combine everything once at the end (fast, linear).
+row_list <- vector("list", n_compounds)  # each slot: the row indices for one compound's on-bits
+col_list <- vector("list", n_compounds)  # each slot: the column indices for one compound's on-bits
+
+# --- Loop over every compound and extract its "on" bits ---
+for (i in seq_along(fp_strings)) {
+  # Split the fingerprint string into individual characters ("0"/"1")
+  # and convert them to integers -> a vector of 0s and 1s of length n_bits.
+  bits <- as.integer(strsplit(fp_strings[[i]], "")[[1]])
+
+  # Find the positions where the bit is 1 (the "on" bits for this compound).
+  on_bits <- which(bits == 1L)
+
+  row_list[[i]] <- rep(i, length(on_bits))  # same row i for all of its on-bits
+  col_list[[i]] <- on_bits                  # the column position of each on-bit
+
+  setTxtProgressBar(pb, i)  # advance the progress bar
+}
+close(pb)
+
+# --- Flatten the per-compound lists into single coordinate vectors ---
+# unlist() concatenates all slots at once, which is far faster than repeatedly
+# growing a vector inside the loop.
+row_idx <- unlist(row_list)   # row coordinate for every on-bit across all compounds
+col_idx <- unlist(col_list)   # column coordinate for every on-bit across all compounds
+
+# --- Assemble the sparse matrix from the collected coordinates ---
+# sparseMatrix places a value of 1 at every (row_idx, col_idx) pair;
+# all other cells are implicitly 0 (and never stored -> memory efficient).
+sparse_M <- sparseMatrix(
+  i    = row_idx,                                  # row coordinates of the 1s
+  j    = col_idx,                                  # column coordinates of the 1s
+  x    = 1,                                         # value to place at each coordinate
+  dims = c(n_compounds, n_bits),                    # full matrix shape (compounds x 2048 bits)
+  dimnames = list(rocks_screening$cichem, NULL)     # label rows by compound ID; columns unnamed
+)
+
+# --- Report the result ---
+cat("Sparse matrix dimensions:", dim(sparse_M), "\n")               # rows (compounds) x cols (bits)
+cat("Memory used:", round(object.size(sparse_M) / 1e6, 1), "MB\n")  # footprint in megabytes
+```
+
+```{r, warning=FALSE, eval=FALSE}
+
+n_compounds <- nrow(sparse_M)
+n_bits      <- ncol(sparse_M)
+k           <- 30
+
+# Build an Annoy index using Hamming space on the binary fingerprints.
+# (Annoy has no native Jaccard; we get approximate candidates via Hamming,
+#  then RE-RANK them with exact Jaccard distance below.)
+ann <- new(AnnoyHamming, n_bits)
+dense_fp <- as.matrix(sparse_M)
+for (i in seq_len(n_compounds)) ann$addItem(i - 1, dense_fp[i, ])
+ann$build(50)  # 50 trees; more = more accurate, slower
+
+# Exact Jaccard (Tanimoto) distance between two binary vectors
+jaccard_dist <- function(a, b) {
+  inter <- sum(a & b)
+  uni   <- sum(a | b)
+  if (uni == 0) 0 else 1 - inter / uni
+}
+
+nn_idx  <- matrix(0L, nrow = n_compounds, ncol = k)
+nn_dist <- matrix(0,  nrow = n_compounds, ncol = k)
+
+pb <- txtProgressBar(min = 0, max = n_compounds, style = 3)
+for (i in seq_len(n_compounds)) {
+  # get a generous candidate pool from Annoy, then re-rank by exact Jaccard
+  cand <- ann$getNNsByItem(i - 1, k * 5) + 1   # +1 back to R indexing
+  cand <- cand[cand != i]                      # drop self
+  d    <- vapply(cand, function(j) jaccard_dist(dense_fp[i, ], dense_fp[j, ]), numeric(1))
+  ord  <- order(d)[1:k]
+  nn_idx[i, ]  <- cand[ord]
+  nn_dist[i, ] <- d[ord]
+  setTxtProgressBar(pb, i)
+}
+close(pb)
+
+umap_result <- uwot::umap(
+  X            = NULL,
+  nn_method    = list(idx = nn_idx, dist = nn_dist),
+  n_components = 2,
+  min_dist     = 0.3,
+  spread       = 1.5,
+  seed         = 42,
+  verbose      = TRUE
+)
+```
+
+```{r, warning=FALSE, eval=FALSE}
+# save umap_result to file
+saveRDS(umap_result, "./output/umap_result_06sept2026.rds")
+```
+
+```{r, warning=FALSE}
+# load umap_result from file
+umap_result <- readRDS("./output/umap_result_06sept2026.rds")
+```
+
+```{r, warning=FALSE}
+dim(umap_result)
+umap_coords <- umap_result
+
+# confirm
+cat("UMAP coords dimensions:", nrow(umap_coords), "x", ncol(umap_coords), "\n")
+# Expected: 50220 x 2
+
+# build data.table with UMAP coordinates and metadata
+umap_dt <- data.table(
+  cichem       = rocks_screening$cichem,
+  primary_name = rocks_screening$primary_name,
+  UMAP1        = umap_coords[, 1],
+  UMAP2        = umap_coords[, 2]
+)
+
+# merge sector info
+umap_dt <- merge(
+  umap_dt,
+  combined_toxcast_summary[, .(
+    cichem = cichem_id, sector = sector_class
+  )],
+  by = "cichem", all.x = TRUE
+)
+# deprecated this to use the sector_class
+#umap_dt[, sector := fcase(
+#  pharmaceutical == TRUE, "pharmaceutical",
+#  agricultural   == TRUE, "agricultural",
+#  industrial     == TRUE, "industrial",
+#  consumer       == TRUE, "consumer",
+#  default = "unknown"
+#)]
+
+```
+
+Here we apply k-means.
+
+```{r k-means, warning=FALSE}
+
+# Preparing for kmeans on UMAP coordinates
+
+umap_matrix <- as.matrix(umap_dt[, .(UMAP1, UMAP2)])
+rownames(umap_matrix) <- umap_dt$cichem
+
+gc()  # free memory before distance computation
+umap_dist     <- dist(umap_matrix, method = "euclidean")
+set.seed(42)
+wss <- sapply(2:50, function(k) {
+  km <- kmeans(umap_matrix, centers = k, nstart = 5, iter.max = 100)
+  km$tot.withinss
+})
+
+plot(2:50, wss, type = "b", pch = 19,
+     xlab = "Number of clusters k",
+     ylab = "Total within-cluster sum of squares",
+     main = "Elbow plot — choose k at the bend")
+
+```
+
+Here, compute the cluster and mediods using the number of clusters, k, from elbow plot above.
+
+```{r, warning=FALSE}
+
+# k from elbow plot above
+k <- 20  # <-- replace with your chosen k
+
+set.seed(42)
+km_result <- kmeans(umap_matrix, centers = k, nstart = 25, iter.max = 200)
+
+umap_dt[, cluster := as.factor(km_result$cluster)]
+
+# Find medioid per cluster (closest point to centroid)
+centroids <- as.data.table(km_result$centers)
+setnames(centroids, c("centroid_UMAP1", "centroid_UMAP2"))
+centroids[, cluster := as.factor(1:.N)]
+
+umap_dt[, dist_to_centroid := {
+  c_umap1 <- centroids[cluster == .BY$cluster, centroid_UMAP1]
+  c_umap2 <- centroids[cluster == .BY$cluster, centroid_UMAP2]
+  sqrt((UMAP1 - c_umap1)^2 + (UMAP2 - c_umap2)^2)
+}, by = cluster]
+
+medoid_reps <- umap_dt[, .SD[which.min(dist_to_centroid)], by = cluster]
+
+cat("Medoid representatives per cluster:\n")
+print(medoid_reps[order(as.integer(cluster)), .(cluster, cichem, primary_name, UMAP1, UMAP2)])
+
+#write.csv(medoid_reps, "./output/medoid_representatives_06sept2026.csv", row.names = FALSE)
+
+```
+
+```{r, warning=FALSE}
+table(umap_dt$sector)
+```
+
+This figure visualizes the UMAP embedding of the screening candidates, colored by sector, with medoid representatives marked with a star (★) and labeled.
+
+```{r k20-mediods-umap, warning=FALSE, fig.height=6, fig.width=8}
+
+fig_mediod <- ggplot() +
+  # --- All compounds, colored by sector ---
+  geom_point(
+    data  = umap_dt,
+    aes(x = UMAP1, y = UMAP2, color = sector),
+    alpha = 0.6, size = 0.3
+  ) +
+  # --- Medoid points ---
+  geom_point(
+    data  = medoid_reps,
+    aes(x = UMAP1, y = UMAP2),
+    color = "black", shape = 8, size = 3
+  ) +
+  # Medoid labels with repel
+  geom_label_repel(
+    data         = medoid_reps,
+    aes(x = UMAP1, y = UMAP2, label = cluster),
+    color        = "black",
+    fontface     = "bold",
+    size         = 3,
+    box.padding  = 0.4,
+    point.padding = 0.3,
+    segment.color = "grey40",
+    segment.size  = 0.3,
+    fill          = "white",
+    label.size    = 0.2,        # border thickness
+    max.overlaps  = Inf
+  ) +
+  scale_color_manual(values = c(
+    "Consumer Only"       = "#000095",
+    "Food Only" = "#00689C",
+    "Industrial Only"     = "#E5DDCA",
+    "Agricultural Only"   = "#00A451",
+    "Multiple Inventories" = '#BCE4F7',
+    "Pharmaceutical Only" = "#CA0123",
+    "Unknown"        = "#FF9D55"
+  )) +
+  guides(
+    color = guide_legend(override.aes = list(size = 4, alpha = 1))
+  ) +
+  theme_minimal() +
+  labs(
+    title    = "",
+    subtitle = paste0("k = ", k, " clusters, medoids marked with ★"),
+    x        = "UMAP 1",
+    y        = "UMAP 2",
+    color    = "Sector"
+  )
+fig_mediod
+
+```
+
+
+```{r, warning=FALSE, fig.height=6, fig.width=8, eval=FALSE}
+# save to ./output as tif at 300 dpi
+tiff("./output/fig7_supplemental_umap_mediods_06sept2026.tif", width = 8, height = 6, units = "in", res = 300)
+grid.draw(fig_mediod)
+dev.off()
+
+```
+
+Here we create a view of what the size and shape of the UMAP clusters are for picking the screening candidate subset. 
+
+```{r umap-cluster-view, warning=FALSE, fig.height=6, fig.width=7}
+
+fig_umap_clusters <- ggplot() +
+  geom_point(
+    data  = umap_dt,
+    aes(x = UMAP1, y = UMAP2, color = cluster),
+    alpha = 0.5, size = 0.6
+  ) +
+#  geom_text(
+#    data  = medoid_reps,
+#    aes(x = UMAP1, y = UMAP2, label = cluster),
+#    color = "black", fontface = "bold", size = 3, vjust = -1
+#  ) +
+  
+    geom_label_repel(
+    data         = medoid_reps,
+    aes(x = UMAP1, y = UMAP2, label = cluster),
+    color        = "black",
+    fontface     = "bold",
+    size         = 3,
+    box.padding  = 0.4,
+    point.padding = 0.3,
+    segment.color = "grey40",
+    segment.size  = 0.3,
+    fill          = "white",
+    label.size    = 0.2,        # border thickness
+    max.overlaps  = Inf
+  )+
+  guides(color = guide_legend(override.aes = list(size = 5, alpha = 1))) +
+  theme_minimal() +
+  labs(
+    title    = "UMAP colored by k-means cluster (k=20)",
+    x        = "UMAP 1",
+    y        = "UMAP 2",
+    color    = "Cluster"
+  )
+
+fig_umap_clusters
+```
+
+```{r, warning=FALSE, eval=FALSE}
+tiff("./output/fig_supplemental_umap_clusters_06sept2026.tif", width = 8, height = 6, units = "in", res = 300)
+grid.draw(fig_umap_clusters)
+dev.off()
+```
+Pick more compounds per cluster to get to first 500 ROCKS chemicals, confirm uniqueness.
+
+```{r, warning=FALSE}
+
+# Deduplicate umap_dt by cichem first
+umap_dt_unique <- unique(umap_dt, by = "cichem")
+cat("Unique compounds:", nrow(umap_dt_unique), "\n")
+
+# Select 25 per cluster (500 total)
+compounds_per_cluster <- ceiling(500 / k)  # = 25
+
+diverse_selection <- umap_dt_unique[, {
+  .SD[order(dist_to_centroid)][1:min(.N, compounds_per_cluster)]
+}, by = cluster]
+
+# Verify uniqueness
+cat("Total compounds selected:", nrow(diverse_selection), "\n")
+cat("Unique cichems:", uniqueN(diverse_selection$cichem), "\n")
+cat("Compounds per cluster:\n")
+print(diverse_selection[, .N, by = cluster][order(as.integer(cluster))])
+
+# Flag any duplicates
+dups <- diverse_selection[duplicated(cichem)]
+if (nrow(dups) > 0) {
+  cat("WARNING:", nrow(dups), "duplicate cichems found:\n")
+  print(dups)
+} else {
+  cat("All cichems are unique.\n")
+}
+```
+
+
+```{r, warning=FALSE, eval=FALSE}
+# Save
+fwrite(diverse_selection[, .(cluster, cichem, primary_name, sector,
+                              UMAP1, UMAP2, dist_to_centroid)],
+       "./output/diverse_ROCKS_endocrine_screening_selection_500_06sept2026.csv")
+
+```
+
+## Now overlay theoretical subset on ROCKS embeddings
+
+I want to see the screenable universe and medioid representatives in the context of the entire ROCKS chemical inventory. I will overlay the 500 selected compounds and the medoid representatives on the densMAP embedding of the entire ROCKS chemical collection.
+
+```{r, warning=FALSE}
+
+#load densUMAP embeddings for all of ROCKS
+#rocks_embed <- fread('./source/fingerprints_07022026.csv')
+#rocks_embed <- fread('./source/chemical_fingerprint_densmap_8.5.2026.csv')
+rocks_embed <- fread('../data/raw/chemical_fingerprint_densmap_8.18.2026.csv')
+```
+
+```{r, warning=FALSE}
+
+cichem_to_cicomp <- unique(rocks_chemistry[, .(cichem, cicomp_id = cicomp)])
+
+screening_with_cicomp <- merge(
+  umap_dt_unique[, .(cichem, cluster, dist_to_centroid, sector)],  # deduplicated
+  cichem_to_cicomp,
+  by = "cichem"
+)
+cat("Screening candidates with cicomp_id:", nrow(screening_with_cicomp), "\n")
+
+#Join onto densMAP coordinates
+screening_densmap <- merge(
+  screening_with_cicomp,
+  rocks_embed[, .(cicomp, densmap_1, densmap_2)],
+  by.x = "cicomp_id",
+  by.y = "cicomp"
+)
+cat("Screening candidates found in densMAP:", nrow(screening_densmap), "\n")
+
+```
+
+```{r, warning=FALSE}
+
+# --- Find which cichem are dropping out ---
+missing_cicomp <- screening_with_cicomp[!cicomp_id %in% rocks_embed$cicomp]
+cat("Missing from densMAP:", nrow(missing_cicomp), "\n")
+cat("Unique cichem missing:", uniqueN(missing_cicomp$cichem), "\n")
+
+# Are they missing from rocks_embed entirely, or is it a cicomp_id mismatch?
+cat("Total unique cicomp_id in rocks_embed:", uniqueN(rocks_embed$cicomp), "\n")
+cat("Sample missing cicomp_ids:\n")
+print(head(missing_cicomp$cicomp_id, 20))
+
+cat("rocks_embed cicomp_id class:", class(rocks_embed$cicomp), "\n")
+cat("Sample rocks_embed cicomp_ids:\n")
+print(head(rocks_embed$cicomp, 5))
+
+# Double-check with exact string match
+test <- intersect(screening_with_cicomp$cicomp_id, rocks_embed$cicomp)
+cat("Exact matches:", length(test), "\n")  
+
+```
+
+
+```{r, warning=FALSE}
+
+#Flag 500 diverse picks and medoids ---
+screening_densmap[, selected_500 := cichem %in% diverse_selection$cichem]
+screening_densmap[, is_medoid    := cichem %in% medoid_reps$cichem]
+
+cat("500 diverse picks matched:", sum(screening_densmap$selected_500), "\n")
+cat("Medoids matched:", sum(screening_densmap$is_medoid), "\n")
+
+```
+Add sector to all of rocks_embed.
+
+```{r, warning=FALSE}
+
+# add sector to rocks_embed
+rocks_embed_sector <- merge(
+  rocks_embed,
+  combined_toxcast_summary[, .(
+    cichem = cichem_id, sector = sector_class
+  )],
+  by = "cichem", all.x = TRUE
+)
+
+```
+
+```{r, warning=FALSE, fig.width=10, fig.height=8}
+
+medoid_densmap <- screening_densmap[is_medoid == TRUE]
+
+fig_densmap_candidates <- ggplot() +
+  # --- Layer 1: full 168k background ---
+  geom_point(
+    data  = rocks_embed_sector,
+    aes(x = densmap_1, y = densmap_2, color=sector),
+    alpha = 0.15, size = 0.2
+  ) +
+  # --- Layer 2: all screenable compounds, colored by sector ---
+  geom_point(
+    data  = screening_densmap,
+    aes(x = densmap_1, y = densmap_2, color=sector),
+    alpha = 0.4, size = 0.4
+  ) +
+  # --- Layer 3: 500 diverse picks ---
+  geom_point(
+    data  = screening_densmap[selected_500 == TRUE],
+    aes(x = densmap_1, y = densmap_2, fill="500 diverse picks"),
+    #color = "black", 
+    shape = 24, size = 2.5, stroke = 0
+  ) +
+  # --- Layer 4: medoid stars ---
+  geom_point(
+    data  = medoid_densmap,
+    aes(x = densmap_1, y = densmap_2),
+    color = "black", shape = 8, size = 3
+  ) +
+  # --- Layer 5: medoid labels ---
+  geom_label_repel(
+    data          = medoid_densmap,
+    aes(x = densmap_1, y = densmap_2, label = cluster),
+    color         = "black",
+    fontface      = "bold",
+    size          = 3,
+    box.padding   = 0.4,
+    point.padding = 0.3,
+    segment.color = "grey40",
+    segment.size  = 0.3,
+    fill          = "white",
+    label.size    = 0.2,
+    max.overlaps  = Inf
+  ) +
+  scale_color_manual(values = c(
+    "Consumer Only"       = "#000095",
+    "Food Only" = "#00689C",
+    "Industrial Only"     = "#E5DDCA",
+    "Agricultural Only"   = "#00A451",
+    "Multiple Inventories" = '#BCE4F7',
+    "Pharmaceutical Only" = "#CA0123",
+    "Unknown"        = "#FF9D55"
+  ))+
+  scale_fill_manual(
+    name   = "Selection",
+    values = c("500 diverse picks" = "#0A32FF")
+  ) +
+  guides(
+    color = guide_legend(override.aes = list(size = 4, alpha = 1)),
+    fill  = guide_legend(override.aes = list(size = 4, shape = 24, fill="#0A32FF"))
+  ) +
+  # --- Expand the plot area to spread things out ---
+  #coord_cartesian(expand = TRUE) +
+    coord_cartesian(xlim = c(-8, 18), ylim = c(-1, 20)) +
+  theme_minimal() +
+  theme(
+    panel.grid.minor = element_blank(),
+    plot.margin      = margin(20, 20, 20, 20)
+  ) +
+  labs(
+    #title    = "Screening candidates on full ROCKS densMAP embedding",
+    x        = "densMAP 1",
+    y        = "densMAP 2",
+    color    = "Sector"
+  )
+
+fig_densmap_candidates
+```
+Important to verify the coordinates needed for the densMAP, so here we check where the data actually are on the densMAP coordinates.
+
+```{r, warning=FALSE}
+
+# First check where the bulk of the data actually sits
+quantile(rocks_embed$densmap_1, c(0.001, 0.999))
+quantile(rocks_embed$densmap_2, c(0.001, 0.999))
+
+
+```
+Create 3 panel figure.
+```{r, warning=FALSE, fig.width=14, fig.height=9}
+
+
+fig_combined <- grid.arrange(
+  arrangeGrob(fig_property_coverage, top = textGrob("A", x = 0, hjust = -0.5, gp = gpar(fontsize = 16, fontface = "bold"))),
+  arrangeGrob(fig_upset, top = textGrob("B", x = 0, hjust = -0.5, gp = gpar(fontsize = 16, fontface = "bold"))),
+  arrangeGrob(fig_densmap_candidates, top = textGrob("C", x = 0, hjust = -0.5, gp = gpar(fontsize = 16, fontface = "bold"))),
+  layout_matrix = rbind(c(1, 2),
+                        c(3, 3)),
+  widths  = c(1, 1),
+  heights = c(1, 1)
+)
+
+fig_combined
+
+
+
+
+```
+
+```{r, warning=FALSE, eval=FALSE}
+# save to ./output as tif at 300 dpi
+tiff("./output/fig7_allpanels_06sept2026.tif", width = 12, height = 9, units = "in", res = 300)
+grid.draw(fig_combined)
+dev.off()
+
+```
+
+# Evaluate ER and AR activity and predictions
+
+Using in silico predictions (CERAPP and COMPARA) and in vitro model predictions (ToxCast ER and AR pathway models), characterize the potential estrogenicity and androgenicity of the ROCKS chemical inventory v1.0. This is a deeper dive into the endocrine activity of the ROCKS chemical inventory, and will help to identify chemicals that may be of concern for further testing.
+
+```{r, warning=FALSE}
+
+# --- Collapse split rows into one row per (cichem_id, model) ---
+# In the raw data, each mode's prediction lives on its own row with the other
+# modes as NA. This coalesces the single real value per mode into one row.
+# (Verified: at most one non-NA value per mode per group, so no information is lost.)
+collapse_mode <- function(x) {
+  if (all(is.na(x))) NA_integer_                   # genuinely no prediction -> NA
+  else as.integer(any(x == 1, na.rm = TRUE))       # recovers the single real value
+}
+
+endo_unique <- combined_endo_summary_classy[
+  model %in% c("CERAPP", "COMPARA"),
+  .(
+    binding       = collapse_mode(binding),
+    agonist       = collapse_mode(agonist),
+    antagonist    = collapse_mode(antagonist),
+    is_qsar_ready = first(is_qsar_ready),
+    discard_error = first(discard_error),
+    dtxsid        = first(dtxsid),
+    kingdom       = first(kingdom),
+    superclass    = first(superclass),
+    class         = first(class),
+    subclass      = first(subclass)
+  ),
+  by = .(cichem_id, model)
+]
+
+# --- Reshape the collapsed data to long format for plotting ---
+cerapp_compara_long <- melt.data.table(
+  endo_unique,
+  id.vars       = c("cichem_id", "dtxsid", "model", "is_qsar_ready", "discard_error"),
+  measure.vars  = c("binding", "agonist", "antagonist"),
+  variable.name = "Mode",
+  value.name    = "Prediction"
+)
+
+# --- Factor the Prediction values (NA -> "No Prediction" category) ---
+cerapp_compara_long[, Prediction := factor(Prediction, levels = c("0", "1"), labels = c("0", "1"))]
+cerapp_compara_long[is.na(Prediction), Prediction := "NA"]
+cerapp_compara_long[, Prediction := factor(Prediction, levels = c("NA", "0", "1"))]
+cerapp_compara_long$label_color <- ifelse(cerapp_compara_long$Prediction == "1", "white", "black")
+```
+
+## What is the coverage of the ROCKS chemical inventory with in silico predictions?
+
+Create grouped bar chart for coverage with CERAPP and COMPARA.
+
+```{r, warning=FALSE}
+# create grouped bar chart of results
+
+fig_in_silico_endo_coverage <- ggplot(
+  cerapp_compara_long,
+  aes(
+    x = model,
+    fill = Prediction
+  )
+) +
+  geom_bar(position = "stack") +
+  facet_wrap(~ Mode) +
+  labs(
+    title = "",
+    x = "Model",
+    y = "Chemical Count"
+  ) +
+  theme_minimal() +
+  # write colors using ULRI colors
+  scale_fill_manual(values = c( "NA" = "grey", "0" = ULcolors[7], "1" = ULcolors[2]),
+                    labels = c('No Prediction', 'Inactive','Active'),
+                    name = "Prediction")+
+  #label the count of each piece of the bar, and change color of text to white for pieces of the bar where Prediction is 1, and black for pieces of the bar where Prediction is 0 and NA
+  geom_text(
+    stat = "count",
+    position = position_stack(vjust = 0.5),
+    aes(label = ..count..,
+        color = Prediction),
+    size = 3,
+    fontface = 'bold',
+  )+
+  scale_color_manual(values = c("0" = "black", "1" = "white", "NA" = "black"), guide = "none")
+  
+fig_in_silico_endo_coverage
+
+```
+
+## What is the coverage of the ROCKS chemical inventory with ToxCast ER and AR models?
+
+```{r, warning=FALSE}
+
+toxcast_long <- melt.data.table(
+  combined_toxcast_summary,
+  id.vars = c("cichem_id", "dtxsid", "model"),
+  measure.vars = c("agonist", "antagonist"),
+  variable.name = "Mode",
+  value.name = "AUC"
+)
+
+toxcast_long <- toxcast_long[!is.na(dtxsid)]
+
+# remove rows for model='ToxCast_ER_2017' and Mode = "antagonist"
+toxcast_long <- toxcast_long[!(model == "ToxCast_ER_2017" & Mode == "antagonist")]
+
+# now, make a column of Prediction based on whether AUC is > 0.1 (active), AUC is <= 0.1 and > 0.001 (equivocal), AUC is < 0.001 (inactive), or NA (no prediction).
+toxcast_long[, Prediction := fifelse(is.na(AUC), "NA",
+                                fifelse(AUC > 0.1, "Active",
+                                fifelse(AUC <= 0.1 & AUC > 0.001, "Equivocal",
+                                "Inactive")))]
+# order Prediction so that Active, Inactive, Equivocal, and then NA appear from bottom to top in the stacked bar chart
+
+toxcast_long[, Prediction := factor(Prediction, levels = c("Inactive", "Equivocal", "Active"))]
+# create grouped bar chart of results
+fig_toxcast_endo_coverage <- ggplot(
+  toxcast_long[Prediction %in% c('Active','Equivocal','Inactive')],
+  aes(
+    x = model,
+    fill = Prediction
+  )
+) +
+  geom_bar(position = "stack") +
+  facet_wrap(~ Mode, scales="free_x") +
+  labs(
+    title = "",
+    x = "Model",
+    y = "Chemical Count"
+  ) +
+  theme_minimal() +
+  # write colors using ULRI colors
+  scale_fill_manual(values = c("Inactive" = ULcolors[7], "Equivocal" = ULcolors[13], "Active" = ULcolors[2]),
+                    labels = c('Inactive','Equivocal', 'Active'),
+                    name = "Prediction")+
+  #label the count of each piece of the bar, and change color of text to white for pieces of the bar where Prediction is Active, and black for pieces of the bar where Prediction is Inactive, Equivocal, or NA
+  geom_text(
+    stat = "count",
+    position = position_stack(vjust = 0.5),
+    aes(label = ..count..,
+        color = Prediction),
+    size = 3,
+    fontface = 'bold',
+  )+
+  scale_color_manual(values = c("Inactive" = "black", "Equivocal" = "black", "Active" = "white", "NA" = "black"), guide = "none")
+
+fig_toxcast_endo_coverage
+
+```
+
+Arrange the two stacked bar plots into panel A and panel B for publication quality.
+
+```{r, warning=FALSE, fig.width=12, fig.height=16, eval=FALSE}
+
+grid.arrange(
+  arrangeGrob(fig_in_silico_endo_coverage, top = textGrob("A", x = 0, hjust = -0.5, gp = gpar(fontsize = 16, fontface = "bold"))),
+  arrangeGrob(fig_toxcast_endo_coverage, top = textGrob("B", x = 0, hjust = -0.5, gp = gpar(fontsize = 16, fontface = "bold"))),
+  ncol = 1
+)
+
+
+png("./output/fig_supplement_barchart_endo_coverage.png", width = 8, height = 8, units = "in", res = 300) 
+grid.arrange(
+  arrangeGrob(fig_in_silico_endo_coverage, top = textGrob("A", x = 0, hjust = -0.5, gp = gpar(fontsize = 16, fontface = "bold"))),
+  arrangeGrob(fig_toxcast_endo_coverage, top = textGrob("B", x = 0, hjust = -0.5, gp = gpar(fontsize = 16, fontface = "bold"))),
+  ncol = 1
+)
+dev.off()
+```
+
+## Understanding the structurable entities in ROCKS chemical inventory
+
+Now I want to create two heatmaps: (1) percent of each ClassyFire Class that has been tested (2) percent of each ClassyFire Class that is positive in the CERAPP and COMPARA models for agonist, antagonist, or binding (combined modes)
+
+First, let's compute counts and percents of predicted and positives.
+
+```{r count-percent-superclass, warning=FALSE}
+
+# Update heatmap_data
+heatmap_data <- combined_endo_summary_classy[
+  model %in% c('CERAPP','COMPARA') &
+  !is.na(superclass) & superclass != "",   # catch both NA and empty-string blanks
+  .(
+    any_positive  = as.integer(any(c(agonist, antagonist, binding) == 1, na.rm = TRUE)),
+    any_predicted = as.integer(any(!is.na(c(agonist, antagonist, binding))))
+  ),
+  by = .(cichem_id, superclass, model)
+]
+
+# Calculate both metrics
+heatmap_summary <- heatmap_data[, .(
+  n_chemicals = .N,
+  percent_positive = (sum(any_positive)/.N) * 100,
+  percent_predicted = (sum(any_predicted)/.N) * 100,
+  count_positive = sum(any_positive),
+  count_predicted = sum(any_predicted)
+), by = .(superclass, model)]
+
+
+# Reshape to long format
+heatmap_counts_long <- melt.data.table(
+  heatmap_summary,
+  id.vars = c("superclass", "model", "n_chemicals"),
+  measure.vars = c("count_positive", "count_predicted"),
+  variable.name = "metric",
+  value.name = "count"
+)
+
+# Reshape to long format for plotting percentages
+heatmap_summary_long <- melt.data.table(
+  heatmap_summary,
+  id.vars = c("superclass", "model", "n_chemicals"),
+  measure.vars = c("percent_positive", "percent_predicted"),
+  variable.name = "metric",
+  value.name = "percent"
+)
+
+# Create n for heatmap
+n_classes_counts <- n_distinct(heatmap_counts_long[!is.na(superclass), superclass])
+n_classes_p <- n_distinct(heatmap_summary_long[!is.na(superclass), superclass])
+
+# For percentage heatmap
+heatmap_summary_long[, superclass := factor(superclass, 
+                                             levels = heatmap_summary_long[metric == "percent_positive"][order(-percent), unique(superclass)])]
+
+# For counts heatmap
+heatmap_counts_long[, superclass := factor(superclass, 
+                                            levels = heatmap_counts_long[metric == "count_positive"][order(-count), unique(superclass)])]
+
+```
+
+```{r, warning=FALSE, fig.width=12, fig.height=16}
+
+fig <- ggplot(heatmap_summary_long[!is.na(superclass)], aes(x = model, y = superclass, fill = percent)) +
+  geom_tile(color = "white", linewidth = 0.5) +
+  geom_text(aes(label = round(percent, 1), color = ifelse(percent > 50, "white", "black")), size = 4) +
+  scale_fill_gradient(low = "white", high = ULcolors[2], limits = c(0, 100), name = "%") +
+  scale_color_identity() +
+  facet_wrap(~ metric, labeller = labeller(metric = c(percent_positive = "% Positive", percent_predicted = "% Predicted"))) +
+  labs(
+    title = "Chemical Predictions by Superclass and Model",
+    x = "Model",
+    y = "Chemical Superclass"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+    axis.text.y = element_text(size = 12),
+    plot.title = element_text(hjust = 0.5, size = 14),
+    aspect.ratio = 4
+  )
+
+
+```
+
+```{r, warning=FALSE, fig.width=12, fig.height=16}
+fig
+
+```
+
+```{r, warning=FALSE}
+
+fig_counts <- ggplot(heatmap_counts_long[!is.na(superclass)], aes(x = model, y = superclass, fill = count)) +
+  geom_tile(color = "white", linewidth = 0.5) +
+  geom_text(aes(label = count, color = ifelse(count > max(count)/2, "white", "black")), size = 4) +
+  scale_fill_gradient(low = "white", high = ULcolors[2], name = "Count") +
+  scale_color_identity() +
+  facet_wrap(~ metric, labeller = labeller(metric = c(count_positive = "Count Positive", count_predicted = "Count Predicted"))) +
+  labs(
+    title = "Chemical Prediction Counts by Superclass and Model",
+    x = "Model",
+    y = "Chemical Superclass"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+    axis.text.y = element_text(size = 10),
+    plot.title = element_text(hjust = 0.5, size = 14),
+    aspect.ratio = 4
+  )
+
+```
+
+```{r, warning=FALSE, fig.width=12, fig.height=16}
+
+fig_counts
+
+```
+
+```{r, warning=FALSE, eval=FALSE}
+# Save percentage heatmap
+ggsave("./output/supplement_classyfire_heatmap_percentage.png", fig, width = 12, height = 20, dpi = 300)
+
+# Save counts heatmap
+ggsave("./output/supplement_classyfire_heatmap_counts.png", fig_counts, width = 12, height = 20, dpi = 300)
+
+```

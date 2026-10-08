@@ -1,0 +1,680 @@
+---
+title: "Screening Amenability and Endocrine Data Compilation"
+toc: true
+toc-depth: 3
+author: "Katie Paul Friedman"
+date: "`r Sys.Date()`"
+format: html
+editor: visual
+code-fold: true
+echo: true
+---
+
+# Purpose
+
+This documents the compilation of endocrine-related hazard knowledge across the ROCKS chemical collection, including in silico consensus models of ER and AR and in vitro data and models for ER and AR. Additionally, compilation of predicted physicochemical property data are included here.
+
+```{r setup, include=FALSE}
+library(DBI)
+library(duckdb)
+library(data.table)
+library(flextable)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(httr)
+library(httr2)
+library(jsonlite)
+library(dplyr)
+library(openxlsx)
+library(tibble)
+library(tidyr)
+library(usethis)
+library(viridis)
+
+```
+
+```{r, warning=FALSE}
+source("./pg_utils.R")
+```
+
+# ROCKS collection sourcing {.tabset .tabset-pills}
+
+## ROCKS chemical collection load from API
+
+Use internal CIIW API to source the ROCKS collection.
+The internal collection is the most up to date resource.
+
+```{r, warning=FALSE, eval=FALSE}
+
+fetch_collection <- function(base_url = "https://ciiw.ulri.ul.org/api/chemistry/chemicals/",
+                             collection_id = 760,
+                             api_key = Sys.getenv("CIIW_API_KEY"),
+                             batch_size = 10000) {
+  all_data <- list()
+  offset <- 0
+  total <- NULL
+  
+  repeat {
+    resp <- request(base_url) |>
+      req_url_query(collection = collection_id, limit = batch_size, offset = offset) |>
+      req_headers(
+        Accept = "application/json",
+        Authorization = paste("Token", api_key)
+      ) |>
+      req_timeout(seconds = 120) |>
+      req_perform()
+    
+    data <- resp_body_json(resp)
+    
+    # Print progress
+    if (is.null(total)) total <- data$count
+    message(sprintf("Fetched %d / %d records...", min(offset + batch_size, total), total))
+    
+    # Exit if no results
+    if (length(data$results) == 0) break
+    
+    all_data[[length(all_data) + 1]] <- rbindlist(lapply(data$results, as.data.table), fill = TRUE)
+    
+    # Exit if no next page
+    if (is.null(data$`next`)) break
+    
+    offset <- offset + batch_size
+    Sys.sleep(1)
+  }
+  
+  rbindlist(all_data, fill = TRUE)
+}
+
+rocks_chem_api <- fetch_collection()
+```
+
+## Sector of use information
+
+Here, the ROCKS chemical inventory v1.0 is loaded with sector of use information.
+
+```{r, warning=FALSE}
+# created by KKI to provide the sector of use by cichem_id for ROCKS
+
+#rocks_chemicals <- fread("./source/rocks_sector_table_0531026.csv")
+#rocks_chemicals <- fread("./source/rocks_sector_table_20260611.csv")
+#rocks_use_sector <- fread("./source/rocks_sector_table_07022026.csv")
+
+# update to latest file
+rocks_use_sector <- fread("../data/raw/rocks_sector_table_2026-08-27.csv")
+```
+
+Confirm chemical entities match between sector of use and API.
+
+```{r, warning=FALSE}
+
+setdiff(rocks_chem_api$cichem_id, rocks_use_sector$cichem_id) #empty
+
+```
+
+Create list of cichem_id values.
+
+```{r, warning=FALSE}
+rocks_cichem_ids <- rocks_chem_api$cichem_id
+```
+
+# In silico model sourcing {.tabset .tabset-pills}
+
+## Retrieve from OPERA predictions
+
+The CERAPP (ER) and COMPARA (AR) model results are generated using OPERA v2.9. To obtain these data internally, we connect to 'pipelines' for pre-generated data stored in Postgres.
+
+```{r, warning=FALSE, echo=FALSE}
+pipe.con <- dbConnect(
+  RPostgres::Postgres(),
+  dbname = "pipelines",
+  host = Sys.getenv("PGHOST"),
+  port = Sys.getenv("PGPORT"),
+  user = Sys.getenv("PGUSER"),
+  password = Sys.getenv("PGPASSWORD")
+)
+```
+
+Here we retrieve CERAPP predictions.
+
+```{r, warning=FALSE}
+# CERAPP
+
+## Create values_clause to reflect all of the cichem_id
+values_clause <- paste0("'", rocks_cichem_ids, "'", collapse = ", ")
+
+sql_query <- paste0("
+SELECT \"chemical_identifier\".\"cichem\",
+       \"chemical_identifier\".\"casrn\",
+       \"chemical_identifier\".\"dtxsid\",
+       \"opera_cerapp_endpoint\".\"id\",
+       \"opera_cerapp_endpoint\".\"molecule_id\",
+       \"opera_cerapp_endpoint\".\"mode\",
+       \"opera_cerapp_endpoint\".\"prediction\",
+       \"opera_cerapp_endpoint\".\"ad_flag\",
+       \"opera_cerapp_endpoint\".\"ad_index\",
+       \"opera_cerapp_endpoint\".\"conf_index\",
+       \"opera_cerapp_endpoint\".\"cas_neighbors\",
+       \"opera_cerapp_endpoint\".\"inchi_key_neighbors\",
+       \"opera_cerapp_endpoint\".\"dtxsid_neighbors\",
+       \"opera_cerapp_endpoint\".\"exp_neighbors\",
+       \"opera_cerapp_endpoint\".\"pred_neighbors\",
+       \"opera_prediction_molecule\".\"is_qsar_ready\",
+       \"opera_prediction_molecule\".\"discard_error\"
+FROM \"opera_cerapp_endpoint\"
+LEFT OUTER JOIN \"opera_prediction_molecule\" 
+  ON (\"opera_cerapp_endpoint\".\"molecule_id\" = \"opera_prediction_molecule\".\"id\")
+LEFT OUTER JOIN \"chemical_identifier\" 
+  ON (\"opera_prediction_molecule\".\"inchikey\" = \"chemical_identifier\".\"inchikey\")
+WHERE \"chemical_identifier\".\"cichem\" = ANY(ARRAY[", values_clause, "])
+  AND \"opera_prediction_molecule\".\"opera_version\" = '2.9'
+ORDER BY \"chemical_identifier\".\"cichem\" ASC, \"opera_cerapp_endpoint\".\"id\" ASC
+")
+
+rocks_cerapp <- dbGetQuery(pipe.con, sql_query) %>% as.data.table()
+```
+
+The ROCKS CERAPP table only includes 446271 obs. How many unique chemicals lack a CERAPP prediction? 
+
++ 89845 chemicals do not have any CERAPP prediction + organometallics, salts, and unstructurables seem to populate this group; they are not QSAR-ready.
+
+```{r, warning=FALSE}
+
+rocks_cerapp[, model := 'CERAPP']
+
+# Want to add a column to rocks_chemicals to indicate if there is a prediction (0 or 1) for 'mode' in rocks_cerapp. There are 3 modes: agonist, antagonist, and binding. Want to keep cichem, dtxsid, ad_flag, ad_index, conf_index, dtxsid_neighbors in the new summary table.
+rocks_chemicals_endo <- merge.data.table(rocks_use_sector,
+                                         rocks_cerapp,
+                                         by.x=c('cichem_id'),
+                                         by.y=c('cichem'),
+                                         all.x=TRUE)
+
+# make a wide table of prediction outcomes by mode for each chemical, keeping the other columns of interest (cichem, dtxsid, ad_flag, ad_index, conf_index, dtxsid_neighbors).
+rocks_chemical_endo_summary <- dcast.data.table(
+  rocks_chemicals_endo,
+  cichem_id + dtxsid.x + model + is_qsar_ready + discard_error ~ ifelse(is.na(mode), unique(na.omit(rocks_chemicals_endo$mode)),mode),
+  value.var = "prediction"
+)
+
+cerapp_rocks_na <- rocks_chemical_endo_summary[is.na(agonist) & is.na(antagonist) & is.na(binding)]
+
+setnames(cerapp_rocks_na, 'dtxsid.x','dtxsid')
+
+```
+
+Number of cichem_id that are not qsar ready matches the number that are NA for all CERAPP endpoints.
+
+```{r, warning=FALSE}
+
+length(unique(rocks_chemical_endo_summary[(is.na(binding) & is.na(agonist) & is.na(antagonist))]$cichem_id))
+
+length(unique(rocks_chemical_endo_summary[is.na(is_qsar_ready)]$cichem)) 
+
+```
+
+Here we retrieve COMPARA predictions.
+
+```{r, warning=FALSE}
+
+sql_query2 <- paste0("
+SELECT \"chemical_identifier\".\"cichem\",
+       \"chemical_identifier\".\"casrn\",
+       \"chemical_identifier\".\"dtxsid\",
+       \"opera_compara_endpoint\".\"id\",
+       \"opera_compara_endpoint\".\"molecule_id\",
+       \"opera_compara_endpoint\".\"mode\",
+       \"opera_compara_endpoint\".\"prediction\",
+       \"opera_compara_endpoint\".\"ad_flag\",
+       \"opera_compara_endpoint\".\"ad_index\",
+       \"opera_compara_endpoint\".\"conf_index\",
+       \"opera_compara_endpoint\".\"cas_neighbors\",
+       \"opera_compara_endpoint\".\"inchi_key_neighbors\",
+       \"opera_compara_endpoint\".\"dtxsid_neighbors\",
+       \"opera_compara_endpoint\".\"exp_neighbors\",
+       \"opera_compara_endpoint\".\"pred_neighbors\",
+       \"opera_prediction_molecule\".\"is_qsar_ready\",
+       \"opera_prediction_molecule\".\"discard_error\"
+FROM \"opera_compara_endpoint\"
+LEFT OUTER JOIN \"opera_prediction_molecule\" 
+  ON (\"opera_compara_endpoint\".\"molecule_id\" = \"opera_prediction_molecule\".\"id\")
+LEFT OUTER JOIN \"chemical_identifier\" 
+  ON (\"opera_prediction_molecule\".\"inchikey\" = \"chemical_identifier\".\"inchikey\")
+WHERE \"chemical_identifier\".\"cichem\" = ANY(ARRAY[", values_clause, "])
+  AND \"opera_prediction_molecule\".\"opera_version\" = '2.9'
+ORDER BY \"chemical_identifier\".\"cichem\" ASC, \"opera_compara_endpoint\".\"id\" ASC
+")
+
+rocks_compara <- dbGetQuery(pipe.con, sql_query2) %>% as.data.table()
+```
+
+Again, we try to consolidate the COMPARA data returned.
+
+```{r, warning=FALSE}
+
+rocks_compara[, model := 'COMPARA']
+rocks_cerapp_compara <- rbind(rocks_cerapp, rocks_compara)
+
+# Want to add a column to rocks_chemicals to indicate if there is a prediction (0 or 1) for 'mode' in rocks_cerapp. There are 3 modes: agonist, antagonist, and binding. Want to keep cichem, dtxsid, ad_flag, ad_index, conf_index, dtxsid_neighbors in the new summary table.
+rocks_chemicals_endo <- merge.data.table(rocks_use_sector,
+                                         rocks_cerapp_compara,
+                                         by.x=c('cichem_id'),
+                                         by.y=c('cichem'),
+                                         all.x=TRUE)
+
+
+rocks_chemicals_endo[is.na(model)]
+
+# i want to duplicate each row for which is.na(model) = TRUE, and assign model = "CERAPP" for one copy and model = "COMPARA" for the other copy, so that when I make the wide table of prediction outcomes by mode, I have a row for each chemical and model combination, even if there are no predictions for that chemical in that model.
+
+rocks_chemicals_endo <- rbind(
+  rocks_chemicals_endo[!is.na(model)],  # Keep only rows with non-NA model
+  rocks_chemicals_endo[is.na(model)][, model := "CERAPP"],
+  rocks_chemicals_endo[is.na(model)][, model := "COMPARA"]
+)
+
+
+# make a wide table of prediction outcomes by mode for each chemical, keeping the other columns of interest (cichem, dtxsid, ad_flag, ad_index, conf_index, dtxsid_neighbors).
+rocks_chemical_endo_summary <- dcast.data.table(
+  rocks_chemicals_endo,
+  cichem_id + dtxsid.x + model + is_qsar_ready + discard_error + ad_flag + ad_index + conf_index ~ ifelse(is.na(mode), unique(na.omit(rocks_chemicals_endo$mode)),mode),
+  value.var = "prediction"
+)
+
+
+cerapp_compara_rocks_na <- rocks_chemical_endo_summary[is.na(agonist) & is.na(antagonist) & is.na(binding)]
+
+setnames(cerapp_compara_rocks_na, 'dtxsid.x','dtxsid')
+#cerapp_rocks_na_dtxsid <- unique(cerapp_rocks_na$dtxsid)
+#write.csv(cerapp_rocks_na, "./output/cerapp_rocks_na.csv", row.names = FALSE)
+setnames(rocks_chemical_endo_summary, 'dtxsid.x','dtxsid')
+```
+
+How much of ROCKS is completely NA across modes in COMPARA?
+More than the non-structurable space (AD limitations are present).
+
+```{r, warning=FALSE}
+
+length(unique(rocks_chemical_endo_summary[!(is.na(binding) & is.na(agonist) & is.na(antagonist))]$cichem_id)) 
+
+```
+
+# In vitro models {.tabset .tabset-pills}
+
+Here, need to compile information on the performance of the ToxCast ER and AR pathway models.
+
+The supplemental material for Judson et al 2017 and Kleinstreuer et al 2017 should include this. Files loaded here.
+
+## ToxCast ER Pathway Model from Judson et al 2017
+
+The Judson et al 2017 Minimal Assay ER paper includes the uncertainty interval, but chemicals are marked by deformatted CAS RN (referred to as CODE from early databases of NCCT) rather than a CAS RN or DTXSID. The next several code chunks attempt to move from the CODE to DTXSID by matching to the chemical table in invitrodb, and then for those that do not match, query the ULRI API for chemical information by exact name match.
+
+```{r}
+# load Judson et al 2017 Supp 1a table.
+er_judson_2017 <- read.xlsx("./source/Judson et al 2017 updated full ER model S1a_auc_med.xlsx", sheet=1, colNames = TRUE) %>% data.table()
+head(er_judson_2017)
+
+```
+
+```{r}
+# use invitrodb v4.3
+## connect to invitrodb version 4.3 internally
+con <- dbConnect(
+  RPostgres::Postgres(),
+  dbname = "invitrodb",
+  host = Sys.getenv("PGHOST"),
+  port = Sys.getenv("PGPORT"),
+  user = Sys.getenv("PGUSER"),
+  password = Sys.getenv("PGPASSWORD")
+)
+
+
+# load chemical table in invitrodb to connect code to dtxsid
+chemicals <- dbGetQuery(con, "SELECT * FROM chemical;") %>% data.table()
+
+# code is not a field, so need to recreate code (deformatted CAS RN)
+chemicals[, code := paste0("C",casn)]
+chemicals$code <- gsub("-", "", chemicals$code) #remove dashes to re-create code
+
+er_judson_2017$DTXSID <- chemicals$dsstox_substance_id[match(er_judson_2017$CODE,
+                                                     chemicals$code)]
+# verify coverage of DTXSID in er_judson_2017
+er_judson_2017[is.na(DTXSID)]
+
+er_judson_2017_nocas2dtxsid_map <- er_judson_2017[is.na(DTXSID)]
+
+```
+
+Make a function to query the ULRI API for chemical information by exact name match to resolve the chemicals that do not map based on CAS RN.
+
+```{r, eval=FALSE}
+# Function to fetch chemical data
+fetch_chemical <- function(chemical_name) {
+  response <- GET(
+    url = paste0("https://org-ul-ulri-dp-01.azurewebsites.net/chemical/search/contain/", URLencode(chemical_name)),
+    add_headers("Accept" = "application/json")
+  )
+  
+  if (status_code(response) == 200) {
+    content <- content(response, as = "text", encoding = "UTF-8")
+    return(fromJSON(content))
+  } else {
+    warning(paste("Failed for:", chemical_name, "- Status:", status_code(response)))
+    return(NULL)
+  }
+}
+
+# Apply to all chemical names in the data.table column
+results <- lapply(er_judson_2017_nocas2dtxsid_map$Name, fetch_chemical)
+
+# Name the list elements for easier access
+names(results) <- er_judson_2017_nocas2dtxsid_map$Name
+
+#save(results, file = "./source/ulri_api_results_nocas.RData")
+```
+
+```{r}
+# need to flatten the table retrieved from the API
+load("./source/ulri_api_results_nocas.RData")
+# Remove NULL entries before binding
+results_clean <- results[!sapply(results, is.null)]
+
+# Combine into single data.table
+results_dt <- rbindlist(results_clean, fill = TRUE, idcol = "search_name")
+
+# View the result
+print(results_dt)
+cat("Found results for", length(results_clean), "out of", length(results), "chemicals\n")
+
+```
+
+There are 11 chemical entities in the original Judson et al. 2017 paper that we cannot map based on CAS or additional searching based on name.
+
+```{r}
+er_judson_2017_nocas2dtxsid_map[, CODE := sub("^C", "", CODE)]
+
+# remove dashes to deformat CAS RN in results from API
+results_dt[, deformatted_cas := gsub("-", "", casrn)]
+results_dt[, deformatted_cas := gsub("_", "", deformatted_cas)]
+
+er_judson_2017_nocas2dtxsid_map <- merge.data.table(er_judson_2017_nocas2dtxsid_map, results_dt, 
+                                              by.x = "CODE", by.y = "deformatted_cas", 
+                                              all.x = TRUE)
+
+
+# 11 chemicals in er_judson_2017_nocas2dtxsid_map do not have a match in the API results, so still missing DTXSID for those.
+er_judson_2017_nocas2dtxsid_map[is.na(dtxsid)]
+
+# fill in dtxsid
+er_judson_2017[is.na(DTXSID), 
+               DTXSID := er_judson_2017_nocas2dtxsid_map[.SD, dtxsid, on = "Name"]]
+
+# verify only 11 dtxsid missing
+er_judson_2017[is.na(DTXSID)]
+
+```
+
+Here, we load in the Kleinstreuer et al. 2017 supplemental table 4 which does include the uncertainty interval around the AUC agonist and antagonist scores.
+
+```{r}
+
+# load Kleinstreuer et al 2017 si 004 table sheet 2 ("Detailed Data")
+ar_kleinstreuer_2017 <- read.xlsx("./source/Kleinstreuer_et_al_2017_AR_AUC_tx6b00347_si_004.xlsx", sheet=2, colNames = TRUE) %>% data.table()
+head(ar_kleinstreuer_2017)
+
+```
+
+Here, save the files for mapping to the Predictions database.
+
+```{r, warning=FALSE}
+
+er_judson_2017[, doi := '10.1016/j.yrtph.2017.09.022']
+er_judson_2017[, pmid := '28993267']
+er_judson_2017[, ref_name := 'Watt et al. (2017)']
+
+ar_kleinstreuer_2017[, doi := '10.1021/acs.chemrestox.6b00347']
+ar_kleinstreuer_2017[, pmid := '27933809']
+ar_kleinstreuer_2017[,ref_name := 'Kleinstreuer et al. (2017)']
+
+#write.xlsx(
+#  list('ToxCast_ER_pathway_model_2017' = er_judson_2017,
+#       'ToxCast_AR_pathway_model_2017' = ar_kleinstreuer_2017),
+#  file = "./output/ToxCast_ER_AR_pathway_models.xlsx"
+#)
+```
+
+Now, consolidate the ER and AR pathway models into the rocks_chemical_endo_summary table.
+
+```{r, warning=FALSE}
+
+## Need to add rows to the rocks_chemical_endo_summary table for the data in er_judson_2017 and ar_kleinstreuer_2017.
+# Match dtxsid from these tables to fill in cichem_id in the rocks_chemical_endo_summary table
+# is_qsar_ready column will be NA
+# discard_error will be NA
+# binding will be NA
+# use the AUC score as the value in the agonist and antagonist columns
+
+## using dtxsid matching, populate cichem in this table
+er_judson_2017[, cichem_id := rocks_use_sector$cichem_id[match(DTXSID, rocks_use_sector$dtxsid)]]
+ar_kleinstreuer_2017[, cichem_id := rocks_use_sector$cichem_id[match(DSSToxGSID, rocks_use_sector$dtxsid)]]
+
+## create simpler summary of both tables that can be normalized into the rocks_chemical_endo_summary table
+
+toxcast_er_summary <- er_judson_2017[, c("cichem_id", "DTXSID", 'AUC.agonist','minbar','maxbar')] %>%
+  rename(agonist = AUC.agonist ,
+         dtxsid = DTXSID,
+         agonist.min = minbar,
+         agonist.max = maxbar) %>%
+  mutate(model = "ToxCast_ER_2017")
+toxcast_er_summary[,antagonist := NA]
+toxcast_er_summary[, antagonist.min := NA]
+toxcast_er_summary[, antagonist.max := NA]
+
+toxcast_ar_summary <- ar_kleinstreuer_2017[, c("cichem_id", 
+                                               "DSSToxGSID",
+                                               "AUC.Agonist",
+                                               "AUC.Agonist.Min.95CI",
+                                               "AUC.Agonist.Max.95CI",
+                                               "AUC.Antagonist",
+                                               "AUC.Antagonist.Min.95CI",
+                                               "AUC.Antagonist.Max.95CI")] %>%
+  rename(dtxsid = DSSToxGSID,
+         agonist = AUC.Agonist,
+         agonist.min = AUC.Agonist.Min.95CI,
+         agonist.max = AUC.Agonist.Max.95CI,
+         antagonist = AUC.Antagonist,
+         antagonist.min = AUC.Antagonist.Min.95CI,
+         antagonist.max = AUC.Antagonist.Max.95CI) %>%
+  mutate(model = "ToxCast_AR_2017")
+
+## now rbind these two tables
+toxcast_model_endo_summary <- rbind(toxcast_er_summary, toxcast_ar_summary)
+
+# Here we shape the data how we really need them, including the entire ROCKS chemical inventory.
+rocks_chemicals_ar <- merge.data.table(rocks_use_sector,
+                                         toxcast_ar_summary,
+                                         by=c('cichem_id'),
+                                         all.x=TRUE)
+rocks_chemicals_ar[, model:= 'ToxCast_AR_2017']
+
+rocks_chemicals_er <- merge.data.table(rocks_use_sector,
+                                         toxcast_er_summary,
+                                         by=c('cichem_id'),
+                                         all.x=TRUE)
+rocks_chemicals_er[, model:= 'ToxCast_ER_2017']
+combined_toxcast_summary <- rbind(rocks_chemicals_ar, rocks_chemicals_er)
+
+# remove unnecessary columns
+combined_toxcast_summary[,c('dtxsid.y') := NULL]
+setnames(combined_toxcast_summary, c('dtxsid.x'), c('dtxsid'))
+
+```
+
+# Load classyFire annotations
+
+Here we load precalculated ClassyFire taxonomy annotations.
+
+```{r, warning=FALSE}
+
+rocks_classy <- pg_query(
+  pipe.con,
+  "
+  SELECT
+      ci.cichem,
+      ci.primary_name,
+      cf.kingdom,
+      cf.superclass,
+      cf.class,
+      cf.subclass
+  FROM descriptors_classyfire cf
+  JOIN chemical_identifier ci ON ci.chemical_id = cf.chemical_id
+  WHERE ci.cichem IN (?cichems)
+  ",
+  schema = "public",
+  cichems = pg_escape_vector(rocks_cichem_ids)
+)
+
+show(rocks_classy)
+rocks_classy <- as.data.table(rocks_classy)
+
+```
+
+```{r, warning=FALSE}
+
+# merge the classy table and the combined_endo_summary table by cichem_id to add the ClassyFire annotations to the endo summary table.
+combined_endo_summary_classy <- merge(rocks_chemical_endo_summary, rocks_classy[, .(cichem, kingdom, superclass,class,subclass)], by.x = "cichem_id", by.y='cichem', all.x = TRUE)
+
+```
+
+# Screening Amenability Data
+
+Here we need to pull OPERA predictions for ROCKS collection. I need: + mass + logP + vapor pressure + HLC
+
+## mass by cichem
+
+```{r, warning=FALSE}
+
+rocks_chemistry <- pg_query(
+  pipe.con,
+  "
+  SELECT
+      cichem, cicomp, primary_name, systematic_name,
+      casrn, dtxsid, inchikey,
+      mol_formula, monoisotopic_mass, average_mass,
+      smiles, updated_on
+  FROM chemical_identifier
+  WHERE cichem IN (?cichems)
+  ",
+  schema = "public",
+  cichems = pg_escape_vector(rocks_cichem_ids)
+)
+
+show(rocks_chemistry)
+rocks_chemistry <- as.data.table(rocks_chemistry)
+
+```
+
+## OPERA property predictions
+
+```{r, warning=FALSE}
+
+rocks_opera <- pg_query(
+  pipe.con,
+  "
+  SELECT
+      ci.cichem,
+      ci.primary_name,
+      m.opera_version,
+      aoh.prediction  AS aoh,  aoh.ad_flag  AS aoh_ad,  aoh.conf_index  AS aoh_ci,
+      bcf.prediction  AS bcf,  bcf.ad_flag  AS bcf_ad,  bcf.conf_index  AS bcf_ci,
+      bio.prediction  AS biodeg, bio.ad_flag AS biodeg_ad, bio.conf_index AS biodeg_ci,
+      bp.prediction   AS bp,   bp.ad_flag   AS bp_ad,   bp.conf_index   AS bp_ci,
+      ca.prediction   AS caco2, ca.ad_flag  AS caco2_ad, ca.conf_index  AS caco2_ci,
+      cl.prediction   AS clint, cl.ad_flag  AS clint_ad, cl.conf_index  AS clint_ci,
+      fu.prediction   AS fub,  fu.ad_flag   AS fub_ad,  fu.conf_index   AS fub_ci,
+      hl.prediction   AS hl,   hl.ad_flag   AS hl_ad,   hl.conf_index   AS hl_ci,
+      km.prediction   AS km,   km.ad_flag   AS km_ad,   km.conf_index   AS km_ci,
+      koa.prediction  AS koa,  koa.ad_flag  AS koa_ad,  koa.conf_index  AS koa_ci,
+      koc.prediction  AS koc,  koc.ad_flag  AS koc_ad,  koc.conf_index  AS koc_ci,
+      lp.prediction   AS logp, lp.ad_flag   AS logp_ad, lp.conf_index   AS logp_ci,
+      mp.prediction   AS mp,   mp.ad_flag   AS mp_ad,   mp.conf_index   AS mp_ci,
+      vp.prediction   AS vp,   vp.ad_flag   AS vp_ad,   vp.conf_index   AS vp_ci,
+      ws.prediction   AS ws,   ws.ad_flag   AS ws_ad,   ws.conf_index   AS ws_ci
+  FROM opera_prediction_molecule m
+  JOIN chemical_identifier          ci  ON ci.inchikey   = m.inchikey
+  LEFT JOIN opera_aoh_endpoint      aoh ON aoh.molecule_id = m.id
+  LEFT JOIN opera_bcf_endpoint      bcf ON bcf.molecule_id = m.id
+  LEFT JOIN opera_biodeg_endpoint   bio ON bio.molecule_id = m.id
+  LEFT JOIN opera_bp_endpoint       bp  ON bp.molecule_id  = m.id
+  LEFT JOIN opera_caco2_endpoint    ca  ON ca.molecule_id  = m.id
+  LEFT JOIN opera_clint_endpoint    cl  ON cl.molecule_id  = m.id
+  LEFT JOIN opera_fub_endpoint      fu  ON fu.molecule_id  = m.id
+  LEFT JOIN opera_hl_endpoint       hl  ON hl.molecule_id  = m.id
+  LEFT JOIN opera_km_endpoint       km  ON km.molecule_id  = m.id
+  LEFT JOIN opera_koa_endpoint      koa ON koa.molecule_id = m.id
+  LEFT JOIN opera_koc_endpoint      koc ON koc.molecule_id = m.id
+  LEFT JOIN opera_logp_endpoint     lp  ON lp.molecule_id  = m.id
+  LEFT JOIN opera_mp_endpoint       mp  ON mp.molecule_id  = m.id
+  LEFT JOIN opera_vp_endpoint       vp  ON vp.molecule_id  = m.id
+  LEFT JOIN opera_ws_endpoint       ws  ON ws.molecule_id  = m.id
+  WHERE ci.cichem IN (?cichems)
+    AND m.opera_version = ?opera_version
+  ORDER BY ci.cichem
+  ",
+  schema = "public",
+  cichems = pg_escape_vector(rocks_cichem_ids),
+  opera_version = "2.9"
+)
+
+show(rocks_opera)
+rocks_opera <- as.data.table(rocks_opera)
+
+```
+
+## Make amenability data table
+
+Need cichem_id, mass, logP, vapor pressure, HLC, water solubility, and the AD flags for each of these properties. Monotopic mass comes from rocks_chemistry but other properties come from rocks_opera.
+
+```{r, warning=FALSE}
+# merge rocks_chemistry and rocks_opera by cichem to get mass and other properties
+rocks_amenability <- merge.data.table(rocks_chemistry[, .(cichem, average_mass)], 
+                                      rocks_opera[, .(cichem, logp, vp, hl, ws, logp_ad, vp_ad, hl_ad, ws_ad)], 
+                                      by = "cichem", all.x = TRUE)
+```
+
+## get morgan fingerprints
+
+```{r, warning=FALSE}
+
+rocks_morganfp <- pg_query(
+  pipe.con,
+  "
+  SELECT
+      ci.cichem,
+      ci.primary_name,
+      mf.success,
+      mf.fp_bit::text AS fp
+  FROM descriptors_morgan_fingerprint mf
+  JOIN chemical_identifier ci ON ci.chemical_id = mf.chemical_id
+  WHERE ci.cichem IN (?cichems)
+  ",
+  schema = "public",
+  cichems = pg_escape_vector(rocks_cichem_ids
+)
+)
+show(rocks_morganfp)
+rocks_morganfp <- as.data.table(rocks_morganfp)
+
+```
+
+# Export to RData
+
+```{r, warning=FALSE}
+
+save(combined_endo_summary_classy,
+     combined_toxcast_summary,
+     rocks_amenability,
+     rocks_morganfp,
+     rocks_chemistry,
+     file = "./source/er_ar_summary_input_06sept26.RData")
+
+```

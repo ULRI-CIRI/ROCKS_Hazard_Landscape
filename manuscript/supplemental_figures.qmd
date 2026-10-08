@@ -1,0 +1,67 @@
+---
+title: "The Hazard Data Landscape of a Global Chemical Inventory: Supplemental Figures"
+date: last-modified
+format:
+  docx:
+    toc: false
+  pdf:
+    toc: false
+bibliography: references.bib
+csl: environmental-science-and-technology.csl
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+# Supplemental Figure S1
+
+```{r}
+knitr::include_graphics(
+  here::here(
+    "outputs",
+    "figures",
+    "depth_by_reach_annex.png"
+  )
+)
+```
+
+**Supplemental Figure S1.** Coverage and depth of toxicological evidence by REACH Annex for chemicals on the ROCKS inventory. Bars show the percentage of chemicals within each REACH Annex category (VII–X) with increasing numbers of in vivo dose response summary values (DRSVs) (≥1, ≥2, or ≥5; left panel) or targeted assay endpoints (≥1, ≥100, or ≥300 endpoints; right panel). Percentages were calculated using the total number of chemicals assigned to each Annex as the denominator. REACH Annex corresponds to increasing regulatory information requirements and tonnage bands, with Annex VII representing the lowest and Annex X the highest information requirements. Parentheses on the x-axis indicate the total number of chemicals assigned to each Annex category.
+
+# Supplemental Figure S2
+
+```{r}
+knitr::include_graphics(
+  here::here("outputs","figures", "hed_aed_threshold_concordance.png")
+  )
+```
+
+**Supplemental Figure S2.** Sensitivity of concordance to targeted in vitro evidence depth. Relationships between the correlation coefficient (R²) for AED versus eBMDHED potency estimates and increasingly stringent filtering criteria. (A) Minimum percentage of active assay endpoints contributing to AED estimation. (B) Minimum number of assay endpoints contributing to AED estimation. Point size is proportional to the number of chemicals meeting each filtering threshold (N), with exact sample sizes shown aside points. 
+
+# Supplemental Figure S3
+
+```{r}
+knitr::include_graphics(
+  here::here(
+    "outputs",
+    "figures",
+    "ghs_hazard_severity_by_chemical_superclass_heatmap_pct.png"
+  )
+)
+```
+
+**Supplemental Figure S3.** Selected chronic GHS health hazard classifications by chemical group. Heatmap showing the percentage of chemicals within each ClassyFire superclass assigned to selected chronic GHS health hazard categories. Superclasses were hierarchically clustered based on hazard profile similarity. The number in parentheses shows the count of chemicals within each superclass. STOT-RE = specific target organ toxicity-repeated exposure. Corresponding to GHS H-codes: D = Danger; W = Warning. 
+
+# Supplemental Figure S4
+
+```{r}
+knitr::include_graphics(
+  here::here(
+    "outputs",
+    "figures",
+    "ghs_class_hazard_enrichment_selected_chronic_categories.png"
+  )
+)
+```
+
+**Supplemental Figure S4.** Class-level enrichment analysis for select hazard categories. Points indicate class-hazard combinations significantly enriched by Fisher’s exact test with Benjamini-Hochberg correction (FDR < 0.01); point size indicates the percentage of chemicals within the class assigned to the hazard category, and color indicates the log₂ odds ratio. Corresponding to GHS H-codes: D = Danger; W = Warning.
