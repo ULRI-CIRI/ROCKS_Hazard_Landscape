@@ -1,0 +1,10 @@
+metric,value
+n_input_rows,203792
+n_output_rows,203792
+n_rows_with_effect_category_mapped,203785
+n_rows_missing_effect_category_mapped,7
+n_unique_missing_toxicological_effect_terms,6
+n_rows_with_final_model1,203088
+n_rows_with_final_model2,125239
+n_rows_missing_final_model1,704
+n_unmapped_toxicological_effect_categories,2

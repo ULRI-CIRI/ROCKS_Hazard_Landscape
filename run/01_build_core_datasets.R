@@ -242,43 +242,6 @@ saveRDS(
   here::here("data", "derived", "tam_assess.rds")
 )
 
-# maybe remove the materialized views, not used in final analyses
-mv_cancer <- dbGetQuery(
-  con_tam,
-  "SELECT *
-   FROM data_platform.mv_carcinogenic_classification"
-) %>%
-  clean_names()
-
-saveRDS(
-  mv_cancer,
-  here::here("data", "derived", "mv_cancer.rds")
-)
-
-mv_skin <- dbGetQuery(
-  con_tam,
-  "SELECT *
-   FROM data_platform.mv_skin_sensitization"
-) %>%
-  clean_names()
-
-saveRDS(
-  mv_skin,
-  here::here("data", "derived", "mv_skin.rds")
-)
-
-mv_invivo <- dbGetQuery(
-  con_tam,
-  "SELECT *
-   FROM data_platform.mv_in_vivo_summary"
-) %>%
-  clean_names()
-
-saveRDS(
-  mv_invivo,
-  here::here("data", "derived", "mv_invivo.rds")
-)
-
 # =====================================================
 # ROCKS INVENTORY INCLUDING FINGERPRINTS
 # =====================================================

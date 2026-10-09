@@ -1,0 +1,2 @@
+n_rows,n_missing_selected_value_oral,n_nonpositive_selected_value_oral,n_missing_toxicological_effect_category_mapped,n_missing_final_model1,n_missing_final_model2,n_missing_toxval_type,n_missing_base_class,n_missing_toxval_type_standard,n_missing_pod_class,n_missing_common_name,n_missing_CF2,n_missing_CF41,n_missing_denom1,n_missing_eBMD_HED1,n_missing_eBMD_HED,n_nonpositive_eBMD_HED1,n_nonpositive_eBMD_HED2
+203792,0,0,7,704,78553,0,20,20,20,0,3472,704,3472,3472,3472,0,0
