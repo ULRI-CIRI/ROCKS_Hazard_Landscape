@@ -2,6 +2,10 @@ library(readxl)
 library(dplyr)
 library(here)
 library(janitor)
+library(tidyr)
+library(ggplot2)
+library(forcats)
+library(readr)
 
 source(here("R", "ulri_theme.R"))
 
@@ -94,12 +98,7 @@ eu_reg_subs <- eu_reg_subs %>%
 eu_reg_subs %>%
   count(Annex, sort = TRUE)
 
-library(dplyr)
-library(tidyr)
-library(ggplot2)
-library(forcats)
-library(here)
-library(readr)
+
 
 # =============================================================================
 # Summarize hazard data availability by REACH Annex
@@ -188,11 +187,11 @@ invitro_counts <- b_exec_sum %>%
 # 4b. Count broad-profiling unique PODs per chemical
 # =============================================================================
 
-broad_profiling <- readxl::read_xlsx(
+broad_profiling <- readr::read_csv(
   here::here(
     "data",
     "raw",
-    "rocks_profile_pod_table.xlsx"
+    "rocks_profile_pod_table_aeds_08sept26.csv"
   )
 )
 

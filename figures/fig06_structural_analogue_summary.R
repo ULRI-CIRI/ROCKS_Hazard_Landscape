@@ -1,16 +1,6 @@
 # ===========================================================
 # fig06_structural_analogue_summary.R
-#
-# Purpose:
-#   Create a 3-panel summary figure for structural analogue
-#   coverage among data-poor ROCKS chemicals.
-#
-# Panels:
-#   A. ROCKS inventory fingerprint/data denominator
-#   B. Coverage across Tanimoto thresholds
-#   C. Number of source analogues per covered target at primary threshold
 # ===========================================================
-
 
 # ===========================================================
 # 0) Libraries
@@ -27,7 +17,6 @@ library(readr)
 library(stringr)
 library(ggrepel)
 
-
 # ===========================================================
 # 1) Paths
 # ===========================================================
@@ -40,7 +29,6 @@ dir.create(
   recursive = TRUE,
   showWarnings = FALSE
 )
-
 
 # ===========================================================
 # 2) Load inputs

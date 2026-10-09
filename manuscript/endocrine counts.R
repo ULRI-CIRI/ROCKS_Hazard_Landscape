@@ -17,7 +17,7 @@ hershutero<- tam %>% filter(study_type=="in vivo endocrine screen")
 mgtg <- drsvs %>%
   filter(
     grepl(
-      "two-generation|multi-generation|416|443|extended one",
+      "two-generation|multi-generation|416|443|extended one|870.3800",
       guideline,
       ignore.case = TRUE
     ) |

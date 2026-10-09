@@ -35,6 +35,7 @@ sector_cols <- c(
 # -------------------------------------------------------------------------
 
 assess_flag <- tam_assess %>%
+  filter(exposure_route=="Oral")%>%
   filter(
     population == "General Population",
     toxval_type != "CTV"

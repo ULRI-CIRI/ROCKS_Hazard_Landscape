@@ -256,9 +256,9 @@ p_panelA <- ggplot(panelA_df, aes(x = 1, y = pct, fill = coverage_group)) +
     y = "Percent of ROCKS chemicals",
     fill = NULL
   ) +
-  theme_minimal(base_size = 16) +
+  theme_minimal(base_size = 18) +
   theme(
-    plot.title = element_text(face = "bold", size = 18),
+    plot.title = element_text(face = "bold", size = 20),
     axis.text.y = element_blank(),
     axis.ticks.y = element_blank(),
     panel.grid.major.y = element_blank(),
