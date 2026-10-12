@@ -139,7 +139,7 @@ con_tam <- dbConnect(
   RPostgres::Postgres(),
   dbname   = Sys.getenv("DB_NAME"),
   host     = Sys.getenv("DB_HOST"),
-  port     = Sys.getenv("DB_PORT"),
+  port     = as.numeric(Sys.getenv("DB_PORT")),
   user     = Sys.getenv("DB_USER"),
   password = Sys.getenv("DB_PASSWORD")
 )
@@ -148,50 +148,72 @@ on.exit({
   try(DBI::dbDisconnect(con_tam), silent = TRUE)
 }, add = TRUE)
 
-tamdb.schema <- "invivodb_v01"
+tamdb.schema <- "release"
 
-base_query <- paste0(
-  "SELECT DISTINCT * ",
-  " FROM ", tamdb.schema, ".tamdb b ",
-  "LEFT JOIN ", tamdb.schema, ".source_chemical a on a.chemical_id=b.chemical_id ",
-  "LEFT JOIN ", tamdb.schema, ".species d on b.species_id=d.species_id ",
-  "LEFT JOIN ", tamdb.schema, ".type_dictionary e on b.toxval_type=e.toxval_type ",
-  "LEFT JOIN ", tamdb.schema, ".record_source f on b.toxval_id=f.toxval_id ",
-  "WHERE f.record_source_level not in ('origin')"
-) %>%
-  gsub("source_chemical..", "a.", ., fixed = TRUE) %>%
-  gsub("tamdb..", "b.", ., fixed = TRUE) %>%
-  gsub("species..", "d.", ., fixed = TRUE) %>%
-  gsub("tamdb_type_dictionary..", "e.", ., fixed = TRUE) %>%
-  gsub("record_source..", "f.", ., fixed = TRUE)
+tamdb_tables = c("in_vivo_summary", "assessment_values")
 
-tam_all <- dbGetQuery(con_tam, base_query)
+tam_all <- lapply(tamdb_tables, function(db_table){
+  type_field = ifelse(db_table == "assessment_values", "assessment_value_name_abbreviated", "response_type")
+  
+  base_query <- paste0(
+    "SELECT DISTINCT ",
+    # Everything from the base table
+    "b.*, ",
+    # Select columns from join tables
+    "a.name as chemical_name, a.casrn, ",
+    "d.common_name, ",
+    "e.toxval_type_supercategory, ",
+    "f.test_guideline ",
+    "FROM ", tamdb.schema, ".", db_table, " b ",
+    "LEFT JOIN ", tamdb.schema, ".source_chemical a on a.chemical_id=b.chemical_id ",
+    "LEFT JOIN ", tamdb.schema, ".species d on b.species_id=d.species_id ",
+    "LEFT JOIN ", tamdb.schema, ".type_dictionary e on b.", type_field,"=e.toxval_type ",
+    "LEFT JOIN ", tamdb.schema, ".record_source f on b.tamdb_id=f.tamdb_id ",
+    "WHERE f.record_source_level not in ('origin')"
+  )
+  
+  dbGetQuery(con_tam, base_query)
+}) %>%
+  dplyr::bind_rows()
 
-tam <- tam_all %>%
+# Add coallesce fields across tables to common field name
+tam_all_renamed <- tam_all %>%
+  dplyr::mutate(
+    toxval_type = dplyr::coalesce(response_type, assessment_value_name_abbreviated),
+    toxval_numeric = dplyr::coalesce(response_value, assessment_value),
+    toxval_units = dplyr::coalesce(response_units, assessment_units)
+  )
+
+saveRDS(
+  tam_all_renamed,
+  here::here("data", "derived", "tam.rds")
+)
+
+drsvs <- tam_all_renamed %>%
   clean_names() %>%
   filter(
     toxval_type_supercategory %in% c(
-      "Dose Response Summary Value",
-      "Mortality Response Summary Value"
+      "Dose Response Summary Value"
     )
   ) %>%
   distinct()
 
 saveRDS(
-  tam,
-  here::here("data", "derived", "tam.rds")
+  drsvs,
+  here::here("data", "derived", "drsvs.rds")
 )
-drsvs<- tam %>% # oral only
+
+drsvs_oral<- tam_all_renamed %>% # oral only
   filter(toxval_type_supercategory=="Dose Response Summary Value")%>%
   filter(exposure_route=="oral")%>%
   filter(toxval_units=="mg/kg-day")
 
 saveRDS(
-  drsvs,
+  drsvs_oral,
   here::here("data", "derived", "hazard_landscape_drsvs.rds")
 )
 
-tam_assess <- tam_all %>%
+tam_assess <- tam_all_renamed %>%
   clean_names() %>%
   filter(
     !toxval_type_supercategory %in% c(

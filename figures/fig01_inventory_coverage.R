@@ -50,11 +50,6 @@ source(here("R", "ulri_theme.R"))
 # 1. Create unique chemical-level flags by cichem_id
 #----------------------------
 
-tam_mrsv_flag <- tam %>%
-  filter(toxval_type_supercategory == "Mortality Response Summary Value") %>%
-  distinct(cichem_id) %>%
-  mutate(has_in_vivo_mrsv = TRUE)
-
 tam_drsv_flag <- tam %>%
   filter(toxval_type_supercategory == "Dose Response Summary Value") %>%
   distinct(cichem_id) %>%
@@ -95,13 +90,11 @@ toxval_by_source <- tam_assess %>%
 
 rocks_panelA <- rocks %>%
   distinct(cichem_id, .keep_all = TRUE) %>%
-  left_join(tam_mrsv_flag, by = "cichem_id") %>%
   left_join(tam_drsv_flag, by = "cichem_id") %>%
   left_join(ivt_flag, by = "cichem_id") %>%
   left_join(bp_flag, by = "cichem_id") %>%
   left_join(assess_flag, by = "cichem_id") %>%
   mutate(
-    has_in_vivo_mrsv = if_else(is.na(has_in_vivo_mrsv), FALSE, has_in_vivo_mrsv),
     has_in_vivo_drsv = if_else(is.na(has_in_vivo_drsv), FALSE, has_in_vivo_drsv),
     has_in_vitro = if_else(is.na(has_in_vitro), FALSE, has_in_vitro),
     has_broad_profiling = if_else(is.na(has_broad_profiling), FALSE, has_broad_profiling),
