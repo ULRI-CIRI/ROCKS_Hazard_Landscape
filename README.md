@@ -10,4 +10,4 @@ R scripts and figure workflows for the hazard landscape manuscript.
 
 ## Disclaimer 
 
-The code provided in this repository is for publication transparency sake only. Some internal-only resources were used to query data that is publicly available in other formats.
+The code provided in this repository is for publication transparency only. Some internal-only resources were used to query data that is publicly available in other formats.
