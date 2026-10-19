@@ -115,7 +115,7 @@ rocks<- readRDS(
 tam_drsvs<- readRDS(
   here::here("data", "derived", "tam.rds"))%>%
   filter(toxval_type_supercategory=="Dose Response Summary Value")%>%
-  filter(study_duration_class!="acute")
+  filter(duration_class!="acute")
 
 b_exec_sum <- readRDS(
   here("data", "derived", "b_exec_sum.rds")
@@ -150,17 +150,6 @@ invitro_data_ids <- b_exec_sum %>%
   filter(!is.na(cichem_id)) %>%
   distinct(cichem_id) %>%
   mutate(has_invitro = TRUE)
-
-#data_available_flag <- full_join(
-#  tam_data_ids,
-#  invitro_data_ids,
-#  by = "cichem_id"
-#) %>%
-#  mutate(
-#    has_tam_drsv = coalesce(has_tam_drsv, FALSE),
-#    has_invitro = coalesce(has_invitro, FALSE),
-#    has_any_data = has_tam_drsv | has_invitro
-#  )
 
 # latest version considers repeat dose DRSVs only for analogues
 data_available_flag <- tam_data_ids %>%

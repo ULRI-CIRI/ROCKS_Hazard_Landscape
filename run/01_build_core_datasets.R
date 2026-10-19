@@ -205,7 +205,7 @@ saveRDS(
 
 drsvs_oral<- tam_all_renamed %>% # oral only
   filter(toxval_type_supercategory=="Dose Response Summary Value")%>%
-  filter(exposure_route=="oral")%>%
+  filter(exposure_route=="Oral")%>%
   filter(toxval_units=="mg/kg-day")
 
 saveRDS(

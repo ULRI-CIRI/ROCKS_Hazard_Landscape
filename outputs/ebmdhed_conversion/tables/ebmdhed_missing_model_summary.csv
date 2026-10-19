@@ -1,11 +1,9 @@
 toxicological_effect_category_for_conversion,toxicological_effect_category_mapped,toxval_type,study_type,n_rows
-cancer,cancer,LEL,in vivo repeat dose,248
-cancer,cancer,LOAEL,in vivo repeat dose,207
-cancer,cancer,NOAEL,in vivo repeat dose,138
+cancer,cancer,LEL,in vivo repeat dose,247
+cancer,cancer,LOAEL,in vivo repeat dose,201
+cancer,cancer,NOAEL,in vivo repeat dose,126
 cancer,cancer,NOEL,in vivo repeat dose,44
 cancer,cancer,NEL,in vivo repeat dose,31
-cancer,cancer,BMDL (10),in vivo repeat dose,24
+cancer,cancer,BMDL (10),in vivo repeat dose,18
 NA,NA,NOAEL,in vivo developmental,7
-cancer,cancer,LOAEC,in vivo repeat dose,2
 cancer,cancer,LOEL,in vivo repeat dose,2
-cancer,cancer,NOAEL,in vivo developmental,1

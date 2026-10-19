@@ -138,7 +138,7 @@ derive_effect_type <- function(study_type, toxicological_effect_category) {
 
 derive_duration_adjustment <- function(
   study_type,
-  study_duration_class,
+  duration_class,
   toxicological_effect_category
 ) {
   effect_type <- derive_effect_type(
@@ -146,7 +146,7 @@ derive_duration_adjustment <- function(
     toxicological_effect_category = toxicological_effect_category
   )
 
-  duration_clean <- study_duration_class %>%
+  duration_clean <- duration_class %>%
     as.character() %>%
     stringr::str_squish() %>%
     stringr::str_to_lower()
@@ -189,7 +189,7 @@ required_drsv_cols <- c(
   "toxval_numeric",
   "toxicological_effect",
   "study_type",
-  "study_duration_class",
+  "duration_class",
   "common_name"
 )
 
@@ -694,7 +694,7 @@ required_conversion_cols <- c(
   "final_model1",
   "final_model2",
   "study_type",
-  "study_duration_class",
+  "duration_class",
   "common_name"
 )
 
@@ -821,7 +821,7 @@ dat <- dat %>%
 
     duration_adjustment = derive_duration_adjustment(
       study_type = study_type,
-      study_duration_class = study_duration_class,
+      duration_class = duration_class,
       toxicological_effect_category =
         toxicological_effect_category_for_conversion
     )
@@ -1128,16 +1128,6 @@ saveRDS(
     "data",
     "derived",
     "hazard_eBMD_HED_unfiltered.rds"
-  )
-)
-
-readr::write_csv(
-  diagnostic_summary,
-  here::here(
-    "outputs",
-    "ebmdhed_conversion",
-    "tables",
-    "ebmdhed_diagnostic_summary.csv"
   )
 )
 
