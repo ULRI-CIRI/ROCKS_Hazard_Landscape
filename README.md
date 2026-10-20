@@ -4,8 +4,11 @@ This repository contains the analysis and figure-generation workflows used in "T
 ## Structure
 - `figures/` = figure-specific scripts
 - `R/` = shared helper functions
-- `run/` = scripts to build figures
-- `data/` = local data inputs (not tracked unless noted)
+- `run/` = scripts to build combined datasets used in analyses and figures
+- `data/raw` = local data inputs
+- 'endocrine/' = analyses for endocrine vignette
+- 'manuscript/' = generate figure Word docs
+- 'outputs/' = figure pngs and Excel files
 
 ## Disclaimer 
 The code provided in this repository is for publication transparency. Some internal-only resources were used to query data that are publicly available in other formats.
