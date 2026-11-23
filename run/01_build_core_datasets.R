@@ -137,24 +137,31 @@ message("\nBuilding TAM datasets...")
 
 con_tam <- dbConnect(
   RPostgres::Postgres(),
-  dbname   = Sys.getenv("DB_NAME"),
-  host     = Sys.getenv("DB_HOST"),
-  port     = as.numeric(Sys.getenv("DB_PORT")),
-  user     = Sys.getenv("DB_USER"),
+  dbname = Sys.getenv("DB_NAME"),
+  host = Sys.getenv("DB_HOST"),
+  port = as.numeric(Sys.getenv("DB_PORT")),
+  user = Sys.getenv("DB_USER"),
   password = Sys.getenv("DB_PASSWORD")
 )
 
-on.exit({
-  try(DBI::dbDisconnect(con_tam), silent = TRUE)
-}, add = TRUE)
+on.exit(
+  {
+    try(DBI::dbDisconnect(con_tam), silent = TRUE)
+  },
+  add = TRUE
+)
 
-tamdb.schema <- "release"
+tamdb.schema <- "tams_v1_release"
 
-tamdb_tables = c("in_vivo_summary", "assessment_values")
+tamdb_tables <- c("in_vivo_summary", "assessment_values")
 
-tam_all <- lapply(tamdb_tables, function(db_table){
-  type_field = ifelse(db_table == "assessment_values", "assessment_value_name_abbreviated", "response_type")
-  
+tam_all <- lapply(tamdb_tables, function(db_table) {
+  type_field <- ifelse(
+    db_table == "assessment_values",
+    "assessment_value_name_abbreviated",
+    "response_type"
+  )
+
   base_query <- paste0(
     "SELECT DISTINCT ",
     # Everything from the base table
@@ -164,14 +171,28 @@ tam_all <- lapply(tamdb_tables, function(db_table){
     "d.common_name, ",
     "e.toxval_type_supercategory, ",
     "f.test_guideline ",
-    "FROM ", tamdb.schema, ".", db_table, " b ",
-    "LEFT JOIN ", tamdb.schema, ".source_chemical a on a.chemical_id=b.chemical_id ",
-    "LEFT JOIN ", tamdb.schema, ".species d on b.species_id=d.species_id ",
-    "LEFT JOIN ", tamdb.schema, ".type_dictionary e on b.", type_field,"=e.toxval_type ",
-    "LEFT JOIN ", tamdb.schema, ".record_source f on b.tamdb_id=f.tamdb_id ",
+    "FROM ",
+    tamdb.schema,
+    ".",
+    db_table,
+    " b ",
+    "LEFT JOIN ",
+    tamdb.schema,
+    ".source_chemical a on a.chemical_id=b.chemical_id ",
+    "LEFT JOIN ",
+    tamdb.schema,
+    ".species d on b.species_id=d.species_id ",
+    "LEFT JOIN ",
+    tamdb.schema,
+    ".type_dictionary e on b.",
+    type_field,
+    "=e.toxval_type ",
+    "LEFT JOIN ",
+    tamdb.schema,
+    ".record_source f on b.tamdb_id=f.tamdb_id ",
     "WHERE f.record_source_level not in ('origin')"
   )
-  
+
   dbGetQuery(con_tam, base_query)
 }) %>%
   dplyr::bind_rows()
@@ -179,7 +200,10 @@ tam_all <- lapply(tamdb_tables, function(db_table){
 # Add coallesce fields across tables to common field name
 tam_all_renamed <- tam_all %>%
   dplyr::mutate(
-    toxval_type = dplyr::coalesce(response_type, assessment_value_name_abbreviated),
+    toxval_type = dplyr::coalesce(
+      response_type,
+      assessment_value_name_abbreviated
+    ),
     toxval_numeric = dplyr::coalesce(response_value, assessment_value),
     toxval_units = dplyr::coalesce(response_units, assessment_units)
   )
@@ -192,9 +216,10 @@ saveRDS(
 drsvs <- tam_all_renamed %>%
   clean_names() %>%
   filter(
-    toxval_type_supercategory %in% c(
-      "Dose Response Summary Value"
-    )
+    toxval_type_supercategory %in%
+      c(
+        "Dose Response Summary Value"
+      )
   ) %>%
   distinct()
 
@@ -203,10 +228,10 @@ saveRDS(
   here::here("data", "derived", "drsvs.rds")
 )
 
-drsvs_oral<- tam_all_renamed %>% # oral only
-  filter(toxval_type_supercategory=="Dose Response Summary Value")%>%
-  filter(exposure_route=="Oral")%>%
-  filter(toxval_units=="mg/kg-day")
+drsvs_oral <- tam_all_renamed %>% # oral only
+  filter(toxval_type_supercategory == "Dose Response Summary Value") %>%
+  filter(exposure_route == "Oral") %>%
+  filter(toxval_units == "mg/kg-day")
 
 saveRDS(
   drsvs_oral,
@@ -216,10 +241,11 @@ saveRDS(
 tam_assess <- tam_all_renamed %>%
   clean_names() %>%
   filter(
-    !toxval_type_supercategory %in% c(
-      "Dose Response Summary Value",
-      "Mortality Response Summary Value"
-    )
+    !toxval_type_supercategory %in%
+      c(
+        "Dose Response Summary Value",
+        "Mortality Response Summary Value"
+      )
   ) %>%
   distinct()
 
@@ -227,7 +253,7 @@ tam_assess <- tam_assess %>%
   mutate(
     source_group = case_when(
       str_detect(source, "IRIS") ~ "US EPA IRIS",
-      str_detect(source, "PPRTV")~ "US EPA PPRTV",
+      str_detect(source, "PPRTV") ~ "US EPA PPRTV",
       str_detect(source, "HEAST") ~ "US EPA HEAST",
       str_detect(source, "HHTV") ~ "US EPA HHTV",
       str_detect(source, "ATSDR") ~ "US ATSDR",
@@ -257,7 +283,7 @@ priority_sources <- c(
 
 tam_assess_filt <- tam_assess %>%
   filter(source_group %in% priority_sources) %>%
-  filter(!toxval_type %in% c("ESL","Odor threshold"))
+  filter(!toxval_type %in% c("ESL", "Odor threshold"))
 
 saveRDS(
   tam_assess_filt,
@@ -273,20 +299,23 @@ message("\nBuilding ROCKS inventory...")
 connect_pipelines <- function() {
   DBI::dbConnect(
     RPostgres::Postgres(),
-    host     = Sys.getenv("DB_HOST"),
-    port     = Sys.getenv("DB_PORT"),
-    dbname   = "pipelines",
-    user     = Sys.getenv("USEUSER"),
+    host = Sys.getenv("DB_HOST"),
+    port = Sys.getenv("DB_PORT"),
+    dbname = "pipelines",
+    user = Sys.getenv("USEUSER"),
     password = Sys.getenv("USEPASSWORD"),
-    sslmode  = Sys.getenv("PGSSLMODE", unset = "require")
+    sslmode = Sys.getenv("PGSSLMODE", unset = "require")
   )
 }
 
 pipe_con <- connect_pipelines()
 
-on.exit({
-  try(DBI::dbDisconnect(pipe_con), silent = TRUE)
-}, add = TRUE)
+on.exit(
+  {
+    try(DBI::dbDisconnect(pipe_con), silent = TRUE)
+  },
+  add = TRUE
+)
 
 chemical_ids <- dbGetQuery(
   pipe_con,
@@ -312,16 +341,18 @@ rocks_sector <- read.csv(
   clean_names() %>%
   normalize_id_types()
 
-if ("cichem" %in% names(rocks_sector) && !"cichem_id" %in% names(rocks_sector)) {
+if (
+  "cichem" %in% names(rocks_sector) && !"cichem_id" %in% names(rocks_sector)
+) {
   rocks_sector <- rocks_sector %>%
     rename(cichem_id = cichem)
 }
 
 chemical_ids_for_join <- chemical_ids %>%
   rename(
-    id_dtxsid   = dtxsid,
-    id_smiles   = smiles,
-    id_inchi    = inchi,
+    id_dtxsid = dtxsid,
+    id_smiles = smiles,
+    id_inchi = inchi,
     id_inchikey = inchikey,
     id_casrn = casrn
   )
@@ -340,12 +371,11 @@ for (id_col in c("dtxsid", "smiles", "inchi", "inchikey", "casrn")) {
 
 rocks_ids <- rocks_ids %>%
   mutate(
-    dtxsid   = coalesce(as.character(dtxsid),   as.character(id_dtxsid)),
-    smiles   = coalesce(as.character(smiles),   as.character(id_smiles)),
-    inchi    = coalesce(as.character(inchi),    as.character(id_inchi)),
+    dtxsid = coalesce(as.character(dtxsid), as.character(id_dtxsid)),
+    smiles = coalesce(as.character(smiles), as.character(id_smiles)),
+    inchi = coalesce(as.character(inchi), as.character(id_inchi)),
     inchikey = coalesce(as.character(inchikey), as.character(id_inchikey)),
     casrn = coalesce(as.character(casrn), as.character(id_casrn))
-
   ) %>%
   select(-starts_with("id_")) %>%
   normalize_id_types()
@@ -387,7 +417,9 @@ if ("cichem_id" %in% names(fp) && "cichem_id" %in% names(rocks_ids)) {
   rocks <- rocks_ids %>%
     left_join(fp, by = "inchikey", suffix = c("", "_fp"))
 } else {
-  warning("No clear fingerprint join key found. rocks.rds will be saved without fingerprint coordinates.")
+  warning(
+    "No clear fingerprint join key found. rocks.rds will be saved without fingerprint coordinates."
+  )
   rocks <- rocks_ids
 }
 
@@ -395,7 +427,7 @@ rocks <- rocks %>%
   coalesce_suffix_column("smiles", "smiles_fp") %>%
   coalesce_suffix_column("inchi", "inchi_fp") %>%
   coalesce_suffix_column("inchikey", "inchikey_fp") %>%
-    coalesce_suffix_column("casrn", "casrn_fp") %>%
+  coalesce_suffix_column("casrn", "casrn_fp") %>%
   normalize_id_types() %>%
   distinct()
 

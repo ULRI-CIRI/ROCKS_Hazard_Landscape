@@ -58,9 +58,12 @@ renv/
 .DS_Store
 Thumbs.db
 
-# Large local data files (customize as needed)
+# Large local data files 
 data/derived/
 data/archive/
+
+# Large generated output
+outputs/ebmdhed_conversion/tables/ebmdhed_study_group_selection_ties.csv
 
 # Temporary scripts/files
 archive/

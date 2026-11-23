@@ -190,7 +190,8 @@ required_drsv_cols <- c(
   "toxicological_effect",
   "study_type",
   "duration_class",
-  "common_name"
+  "common_name",
+  "study_group"
 )
 
 missing_drsv_cols <- setdiff(required_drsv_cols, names(drsv))
@@ -695,7 +696,8 @@ required_conversion_cols <- c(
   "final_model2",
   "study_type",
   "duration_class",
-  "common_name"
+  "common_name",
+  "study_group"
 )
 
 missing_conversion_cols <- setdiff(
@@ -826,6 +828,161 @@ dat <- dat %>%
         toxicological_effect_category_for_conversion
     )
   )
+
+#===============================================================================
+# SELECT ONE DRSV PER STUDY GROUP
+#
+# Priority:
+#   BMDL > NOAEL > LOAEL > N(O)EL > L(O)EL
+#
+# Within each DRSV type, prefer an existing HED value.
+#
+# Remaining exact ties are resolved by row_id so that the selection is
+# deterministic. Missing study_group values are treated as separate records
+# rather than being collapsed into one NA group.
+#===============================================================================
+
+dat_before_study_group_selection <- dat
+
+
+# Assign selection priorities.
+# Lower numbers indicate higher priority.
+dat_ranked <- dat_before_study_group_selection %>%
+  dplyr::mutate(
+    drsv_type_priority = dplyr::case_when(
+      toxval_type_standard == "BMDL"  ~ 1L,
+      toxval_type_standard == "NOAEL" ~ 2L,
+      toxval_type_standard == "LOAEL" ~ 3L,
+      toxval_type_standard == "NOEL"  ~ 4L,
+      toxval_type_standard == "LOEL"  ~ 5L,
+      TRUE                            ~ 99L
+    ),
+
+    hed_priority = dplyr::case_when(
+      toxval_numeric_hed == 1 ~ 1L,
+      TRUE                    ~ 2L
+    ),
+
+    # Prevent all missing study_group values from being grouped together.
+    study_group_selection = dplyr::case_when(
+      !is.na(study_group) &
+        stringr::str_squish(as.character(study_group)) != "" ~
+        stringr::str_squish(as.character(study_group)),
+
+      TRUE ~ paste0("__missing_study_group_row_", row_id)
+    )
+  )
+
+
+# Diagnose ties remaining after applying type and HED priority.
+study_group_selection_ties <- dat_ranked %>%
+  dplyr::group_by(
+    dtxsid,
+    study_group_selection
+  ) %>%
+  dplyr::mutate(
+    best_type_priority = min(
+      drsv_type_priority,
+      na.rm = TRUE
+    ),
+
+    best_hed_priority = min(
+      hed_priority[drsv_type_priority == best_type_priority],
+      na.rm = TRUE
+    )
+  ) %>%
+  dplyr::filter(
+    drsv_type_priority == best_type_priority,
+    hed_priority == best_hed_priority
+  ) %>%
+  dplyr::mutate(
+    n_equally_ranked = dplyr::n()
+  ) %>%
+  dplyr::ungroup() %>%
+  dplyr::filter(n_equally_ranked > 1) %>%
+  dplyr::arrange(
+    dtxsid,
+    study_group_selection,
+    row_id
+  )
+
+
+readr::write_csv(
+  study_group_selection_ties,
+  here::here(
+    "outputs",
+    "ebmdhed_conversion",
+    "tables",
+    "ebmdhed_study_group_selection_ties.csv"
+  )
+)
+
+
+# Select exactly one DRSV per chemical and study group.
+dat <- dat_ranked %>%
+  dplyr::arrange(
+    dtxsid,
+    study_group_selection,
+    drsv_type_priority,
+    hed_priority,
+    row_id
+  ) %>%
+  dplyr::group_by(
+    dtxsid,
+    study_group_selection
+  ) %>%
+  dplyr::slice_head(n = 1) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(
+    study_group_selection_reason = paste0(
+      "Selected ",
+      dplyr::coalesce(toxval_type_standard, "unclassified"),
+      "; ",
+      dplyr::if_else(
+        toxval_numeric_hed == 1,
+        "existing HED preferred",
+        "non-HED selected"
+      )
+    )
+  )
+
+study_group_selection_summary <- tibble::tibble(
+  metric = c(
+    "n_rows_before_study_group_selection",
+    "n_rows_after_study_group_selection",
+    "n_rows_removed_by_study_group_selection",
+    "n_unique_chemical_study_groups",
+    "n_selected_existing_HED",
+    "n_selected_non_HED",
+    "n_study_groups_with_equally_ranked_candidates",
+    "n_selected_unclassified_DRSV_types"
+  ),
+
+  value = c(
+    nrow(dat_before_study_group_selection),
+    nrow(dat),
+    nrow(dat_before_study_group_selection) - nrow(dat),
+
+    dat %>%
+      dplyr::distinct(
+        dtxsid,
+        study_group_selection
+      ) %>%
+      nrow(),
+
+    sum(dat$toxval_numeric_hed == 1, na.rm = TRUE),
+    sum(dat$toxval_numeric_hed != 1, na.rm = TRUE),
+
+    study_group_selection_ties %>%
+      dplyr::distinct(
+        dtxsid,
+        study_group_selection
+      ) %>%
+      nrow(),
+
+    sum(dat$drsv_type_priority == 99L, na.rm = TRUE)
+  )
+)
 
 #---------------------------
 # conversion factors
