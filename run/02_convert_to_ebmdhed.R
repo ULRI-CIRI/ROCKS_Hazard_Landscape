@@ -256,8 +256,10 @@ effect_map <- effect_map_raw %>%
       as.character() %>%
       stringr::str_squish(),
 
-    toxicological_effect_category =
-      dplyr::na_if(toxicological_effect_category, "")
+    toxicological_effect_category = dplyr::na_if(
+      toxicological_effect_category,
+      ""
+    )
   ) %>%
   dplyr::filter(
     !is.na(toxicological_effect),
@@ -324,8 +326,10 @@ effect_category_by_row <- effect_long_mapped %>%
     .groups = "drop"
   ) %>%
   dplyr::mutate(
-    toxicological_effect_category_mapped =
-      dplyr::na_if(toxicological_effect_category_mapped, "")
+    toxicological_effect_category_mapped = dplyr::na_if(
+      toxicological_effect_category_mapped,
+      ""
+    )
   )
 
 hazard_effect_category_mapped <- drsv %>%
@@ -334,8 +338,9 @@ hazard_effect_category_mapped <- drsv %>%
     by = "row_id"
   ) %>%
   dplyr::mutate(
-    effect_category_mapping_missing =
-      is.na(toxicological_effect_category_mapped)
+    effect_category_mapping_missing = is.na(
+      toxicological_effect_category_mapped
+    )
   )
 
 saveRDS(
@@ -443,8 +448,7 @@ mapping_long <- mapping_base %>%
     sep = "\\|"
   ) %>%
   dplyr::mutate(
-    toxicological_effect_category_mapped =
-      toxicological_effect_category_mapped %>%
+    toxicological_effect_category_mapped = toxicological_effect_category_mapped %>%
       as.character() %>%
       stringr::str_squish() %>%
       stringr::str_to_lower()
@@ -509,14 +513,14 @@ mapping_collapsed <- mapping_long_joined %>%
     .groups = "drop"
   ) %>%
   dplyr::mutate(
-    toxicological_effect_category_conceptual =
-      dplyr::na_if(toxicological_effect_category_conceptual, ""),
+    toxicological_effect_category_conceptual = dplyr::na_if(
+      toxicological_effect_category_conceptual,
+      ""
+    ),
 
-    model1_all =
-      dplyr::na_if(model1_all, ""),
+    model1_all = dplyr::na_if(model1_all, ""),
 
-    model2_all =
-      dplyr::na_if(model2_all, "")
+    model2_all = dplyr::na_if(model2_all, "")
   )
 
 mapping_row_level <- mapping_base %>%
@@ -732,8 +736,9 @@ if (is.na(effect_category_col)) {
 } else {
   dat <- dat %>%
     dplyr::mutate(
-      toxicological_effect_category_for_conversion =
-        .data[[effect_category_col]]
+      toxicological_effect_category_for_conversion = .data[[
+        effect_category_col
+      ]]
     )
 }
 
@@ -749,9 +754,15 @@ if (!"toxval_numeric_hed" %in% names(dat)) {
 dat <- dat %>%
   dplyr::mutate(
     toxval_numeric_hed = dplyr::case_when(
-      as.character(toxval_numeric_hed) %in% c(
-        "1", "TRUE", "True", "true", "yes", "YES"
-      ) ~ 1,
+      as.character(toxval_numeric_hed) %in%
+        c(
+          "1",
+          "TRUE",
+          "True",
+          "true",
+          "yes",
+          "YES"
+        ) ~ 1,
       TRUE ~ 0
     )
   )
@@ -809,180 +820,21 @@ dat <- dat %>%
 
     base_class = derive_base_class(toxval_type),
 
-    toxval_type_standard =
-      derive_toxval_type_standard(base_class),
+    toxval_type_standard = derive_toxval_type_standard(base_class),
 
-    pod_class =
-      derive_pod_class(toxval_type_standard),
+    pod_class = derive_pod_class(toxval_type_standard),
 
     type = derive_effect_type(
       study_type = study_type,
-      toxicological_effect_category =
-        toxicological_effect_category_for_conversion
+      toxicological_effect_category = toxicological_effect_category_for_conversion
     ),
 
     duration_adjustment = derive_duration_adjustment(
       study_type = study_type,
       duration_class = duration_class,
-      toxicological_effect_category =
-        toxicological_effect_category_for_conversion
+      toxicological_effect_category = toxicological_effect_category_for_conversion
     )
   )
-
-#===============================================================================
-# SELECT ONE DRSV PER STUDY GROUP
-#
-# Priority:
-#   BMDL > NOAEL > LOAEL > N(O)EL > L(O)EL
-#
-# Within each DRSV type, prefer an existing HED value.
-#
-# Remaining exact ties are resolved by row_id so that the selection is
-# deterministic. Missing study_group values are treated as separate records
-# rather than being collapsed into one NA group.
-#===============================================================================
-
-dat_before_study_group_selection <- dat
-
-
-# Assign selection priorities.
-# Lower numbers indicate higher priority.
-dat_ranked <- dat_before_study_group_selection %>%
-  dplyr::mutate(
-    drsv_type_priority = dplyr::case_when(
-      toxval_type_standard == "BMDL"  ~ 1L,
-      toxval_type_standard == "NOAEL" ~ 2L,
-      toxval_type_standard == "LOAEL" ~ 3L,
-      toxval_type_standard == "NOEL"  ~ 4L,
-      toxval_type_standard == "LOEL"  ~ 5L,
-      TRUE                            ~ 99L
-    ),
-
-    hed_priority = dplyr::case_when(
-      toxval_numeric_hed == 1 ~ 1L,
-      TRUE                    ~ 2L
-    ),
-
-    # Prevent all missing study_group values from being grouped together.
-    study_group_selection = dplyr::case_when(
-      !is.na(study_group) &
-        stringr::str_squish(as.character(study_group)) != "" ~
-        stringr::str_squish(as.character(study_group)),
-
-      TRUE ~ paste0("__missing_study_group_row_", row_id)
-    )
-  )
-
-
-# Diagnose ties remaining after applying type and HED priority.
-study_group_selection_ties <- dat_ranked %>%
-  dplyr::group_by(
-    dtxsid,
-    study_group_selection
-  ) %>%
-  dplyr::mutate(
-    best_type_priority = min(
-      drsv_type_priority,
-      na.rm = TRUE
-    ),
-
-    best_hed_priority = min(
-      hed_priority[drsv_type_priority == best_type_priority],
-      na.rm = TRUE
-    )
-  ) %>%
-  dplyr::filter(
-    drsv_type_priority == best_type_priority,
-    hed_priority == best_hed_priority
-  ) %>%
-  dplyr::mutate(
-    n_equally_ranked = dplyr::n()
-  ) %>%
-  dplyr::ungroup() %>%
-  dplyr::filter(n_equally_ranked > 1) %>%
-  dplyr::arrange(
-    dtxsid,
-    study_group_selection,
-    row_id
-  )
-
-
-readr::write_csv(
-  study_group_selection_ties,
-  here::here(
-    "outputs",
-    "ebmdhed_conversion",
-    "tables",
-    "ebmdhed_study_group_selection_ties.csv"
-  )
-)
-
-
-# Select exactly one DRSV per chemical and study group.
-dat <- dat_ranked %>%
-  dplyr::arrange(
-    dtxsid,
-    study_group_selection,
-    drsv_type_priority,
-    hed_priority,
-    row_id
-  ) %>%
-  dplyr::group_by(
-    dtxsid,
-    study_group_selection
-  ) %>%
-  dplyr::slice_head(n = 1) %>%
-  dplyr::ungroup() %>%
-  dplyr::mutate(
-    study_group_selection_reason = paste0(
-      "Selected ",
-      dplyr::coalesce(toxval_type_standard, "unclassified"),
-      "; ",
-      dplyr::if_else(
-        toxval_numeric_hed == 1,
-        "existing HED preferred",
-        "non-HED selected"
-      )
-    )
-  )
-
-study_group_selection_summary <- tibble::tibble(
-  metric = c(
-    "n_rows_before_study_group_selection",
-    "n_rows_after_study_group_selection",
-    "n_rows_removed_by_study_group_selection",
-    "n_unique_chemical_study_groups",
-    "n_selected_existing_HED",
-    "n_selected_non_HED",
-    "n_study_groups_with_equally_ranked_candidates",
-    "n_selected_unclassified_DRSV_types"
-  ),
-
-  value = c(
-    nrow(dat_before_study_group_selection),
-    nrow(dat),
-    nrow(dat_before_study_group_selection) - nrow(dat),
-
-    dat %>%
-      dplyr::distinct(
-        dtxsid,
-        study_group_selection
-      ) %>%
-      nrow(),
-
-    sum(dat$toxval_numeric_hed == 1, na.rm = TRUE),
-    sum(dat$toxval_numeric_hed != 1, na.rm = TRUE),
-
-    study_group_selection_ties %>%
-      dplyr::distinct(
-        dtxsid,
-        study_group_selection
-      ) %>%
-      nrow(),
-
-    sum(dat$drsv_type_priority == 99L, na.rm = TRUE)
-  )
-)
 
 #---------------------------
 # conversion factors
@@ -1067,9 +919,9 @@ dat <- dat %>%
   )
 
 #---------------------------
-# derive eBMD.HED 
+# derive eBMD.HED
 #---------------------------
-dat <- dat  %>%
+dat <- dat %>%
   dplyr::mutate(
     denom1 = CF1 * CF2 * CF3 * CF41 * CF5,
 
@@ -1120,7 +972,7 @@ hed_p_by_chem_ebmdhed <- dat %>%
       )
     ),
 
-        hed_p18 = as.numeric(
+    hed_p18 = as.numeric(
       quantile(
         eBMD.HED,
         probs = 0.1877,
@@ -1142,10 +994,12 @@ hed_p_by_chem_ebmdhed <- dat %>%
   )
 
 saveRDS(
-  hed_p_by_chem_ebmdhed, here::here(
-  "data",
-  "derived",
-  "hed_p_by_chem_ebmdhed.rds")
+  hed_p_by_chem_ebmdhed,
+  here::here(
+    "data",
+    "derived",
+    "hed_p_by_chem_ebmdhed.rds"
+  )
 )
 
 
@@ -1160,8 +1014,9 @@ diagnostic_summary <- dat %>%
     n_nonpositive_selected_value_oral = sum(
       !is.na(selected_value_oral) & selected_value_oral <= 0
     ),
-    n_missing_toxicological_effect_category_mapped =
-      sum(is.na(toxicological_effect_category_mapped)),
+    n_missing_toxicological_effect_category_mapped = sum(is.na(
+      toxicological_effect_category_mapped
+    )),
     n_missing_final_model1 = sum(is.na(final_model1)),
     n_missing_final_model2 = sum(is.na(final_model2)),
     n_missing_toxval_type = sum(is.na(toxval_type)),
@@ -1340,18 +1195,28 @@ readr::write_csv(
 
 message(
   "Hazard landscape oral DRSV to eBMD.HED workflow complete: ",
-  "n_input_rows = ", nrow(dat_unfiltered),
-  "; n_output_rows = ", nrow(dat),
-  "; n_removed_missing_eBMD_HED = ", nrow(dat_unfiltered) - nrow(dat),
+  "n_input_rows = ",
+  nrow(dat_unfiltered),
+  "; n_output_rows = ",
+  nrow(dat),
+  "; n_removed_missing_eBMD_HED = ",
+  nrow(dat_unfiltered) - nrow(dat),
   "; n_unique_missing_toxicological_effect_terms = ",
   nrow(missing_toxicological_effect_terms),
   "; n_unmapped_toxicological_effect_categories = ",
   nrow(unmapped_toxicological_effect_categories),
-  "; n_with_final_model2 = ", sum(!is.na(dat_unfiltered$final_model2)),
-  "; n_bmdl_rows = ", sum(dat_unfiltered$pod_class == "BMDL", na.rm = TRUE),
-  "; n_bmd_rows = ", sum(dat_unfiltered$pod_class == "BMD", na.rm = TRUE),
-  "; n_level_rows = ", sum(dat_unfiltered$pod_class == "LEVEL", na.rm = TRUE),
-  "; n_missing_CF2 = ", sum(is.na(dat_unfiltered$CF2)),
-  "; n_missing_base_class = ", sum(is.na(dat_unfiltered$base_class)),
-  "; n_missing_final_model1 = ", sum(is.na(dat_unfiltered$final_model1))
+  "; n_with_final_model2 = ",
+  sum(!is.na(dat_unfiltered$final_model2)),
+  "; n_bmdl_rows = ",
+  sum(dat_unfiltered$pod_class == "BMDL", na.rm = TRUE),
+  "; n_bmd_rows = ",
+  sum(dat_unfiltered$pod_class == "BMD", na.rm = TRUE),
+  "; n_level_rows = ",
+  sum(dat_unfiltered$pod_class == "LEVEL", na.rm = TRUE),
+  "; n_missing_CF2 = ",
+  sum(is.na(dat_unfiltered$CF2)),
+  "; n_missing_base_class = ",
+  sum(is.na(dat_unfiltered$base_class)),
+  "; n_missing_final_model1 = ",
+  sum(is.na(dat_unfiltered$final_model1))
 )

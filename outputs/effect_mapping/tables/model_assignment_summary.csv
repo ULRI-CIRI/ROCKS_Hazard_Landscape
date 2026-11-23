@@ -1,7 +1,7 @@
 final_model1,final_model2,n_rows
-continuous,quantal-deterministic,72901
-continuous,NA,62779
-continuous,quantal-stochastic,38098
-quantal-deterministic,NA,11616
-quantal-stochastic,NA,1436
-NA,NA,676
+continuous,quantal-deterministic,41412
+continuous,quantal-stochastic,20202
+continuous,NA,15491
+quantal-deterministic,NA,5344
+quantal-stochastic,NA,875
+NA,NA,356

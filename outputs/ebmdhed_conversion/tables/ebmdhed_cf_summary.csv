@@ -1,81 +1,81 @@
 duration_adjustment,type,common_name,toxval_numeric_hed,toxval_type_standard,pod_class,CF1,CF2,CF3,CF5,n_rows
-no adjustment,reproductive developmental,Rat,0,NOAEL,LEVEL,1,4.229485053762256,1,1,14971
-unspecified,repeat dose,Rat,0,NOAEL,LEVEL,1,4.229485053762256,1,1,14482
-chronic,repeat dose,Rat,0,NOAEL,LEVEL,1,4.229485053762256,1,1,13711
+no adjustment,reproductive developmental,Rat,0,NOAEL,LEVEL,1,4.229485053762256,1,1,14926
+unspecified,repeat dose,Rat,0,NOAEL,LEVEL,1,4.229485053762256,1,1,14516
+chronic,repeat dose,Rat,0,NOAEL,LEVEL,1,4.229485053762256,1,1,13722
 short-term,repeat dose,Rat,0,NOAEL,LEVEL,5,4.229485053762256,1,1,6994
-chronic,repeat dose,Mouse,0,NOAEL,LEVEL,1,7.186082239261685,1,1,2760
-chronic,repeat dose,Rat,0,LOEL,LEVEL,1,4.229485053762256,3,1,2237
-chronic,repeat dose,Dog,0,NOAEL,LEVEL,1,1.681792830507429,1,1,2219
-no adjustment,reproductive developmental,Rat,0,NOEL,LEVEL,1,4.229485053762256,1,1,2057
-no adjustment,reproductive developmental,Rabbit,0,NOAEL,LEVEL,1,2.378414230005442,1,1,2030
+chronic,repeat dose,Mouse,0,NOAEL,LEVEL,1,7.186082239261685,1,1,2763
+chronic,repeat dose,Rat,0,LOEL,LEVEL,1,4.229485053762256,3,1,2225
+chronic,repeat dose,Dog,0,NOAEL,LEVEL,1,1.681792830507429,1,1,2222
+no adjustment,reproductive developmental,Rat,0,NOEL,LEVEL,1,4.229485053762256,1,1,2051
+no adjustment,reproductive developmental,Rabbit,0,NOAEL,LEVEL,1,2.378414230005442,1,1,2033
 chronic,repeat dose,Rat,0,NOEL,LEVEL,1,4.229485053762256,1,1,1748
-unspecified,repeat dose,Rabbit,0,NOAEL,LEVEL,1,2.378414230005442,1,1,1499
-short-term,repeat dose,Rat,0,NOEL,LEVEL,5,4.229485053762256,1,1,1476
-no adjustment,reproductive developmental,Rat,0,LOEL,LEVEL,1,4.229485053762256,3,1,1376
-unspecified,repeat dose,Rat,0,NOEL,LEVEL,1,4.229485053762256,1,1,1298
-unspecified,repeat dose,Mouse,0,NOAEL,LEVEL,1,7.186082239261685,1,1,1125
-chronic,repeat dose,Rat,0,LOAEL,LEVEL,1,4.229485053762256,3,1,1124
-short-term,repeat dose,Rat,0,LOEL,LEVEL,5,4.229485053762256,3,1,1120
-no adjustment,reproductive developmental,Mouse,0,NOAEL,LEVEL,1,7.186082239261685,1,1,1083
+unspecified,repeat dose,Rabbit,0,NOAEL,LEVEL,1,2.378414230005442,1,1,1496
+short-term,repeat dose,Rat,0,NOEL,LEVEL,5,4.229485053762256,1,1,1477
+no adjustment,reproductive developmental,Rat,0,LOEL,LEVEL,1,4.229485053762256,3,1,1368
+unspecified,repeat dose,Rat,0,NOEL,LEVEL,1,4.229485053762256,1,1,1303
+chronic,repeat dose,Rat,0,LOAEL,LEVEL,1,4.229485053762256,3,1,1146
+unspecified,repeat dose,Mouse,0,NOAEL,LEVEL,1,7.186082239261685,1,1,1126
+short-term,repeat dose,Rat,0,LOEL,LEVEL,5,4.229485053762256,3,1,1112
+no adjustment,reproductive developmental,Mouse,0,NOAEL,LEVEL,1,7.186082239261685,1,1,1079
 chronic,repeat dose,Dog,0,LOEL,LEVEL,1,1.681792830507429,3,1,806
 chronic,repeat dose,Mouse,0,LOEL,LEVEL,1,7.186082239261685,3,1,673
 unspecified,repeat dose,Rat,0,LOAEL,LEVEL,1,4.229485053762256,3,1,552
-unspecified,repeat dose,Rat,0,LOEL,LEVEL,1,4.229485053762256,3,1,503
+unspecified,repeat dose,Rat,0,LOEL,LEVEL,1,4.229485053762256,3,1,514
 short-term,repeat dose,Rat,0,LOAEL,LEVEL,5,4.229485053762256,3,1,496
 no adjustment,reproductive developmental,Rat,0,LOAEL,LEVEL,1,4.229485053762256,3,1,476
 short-term,repeat dose,Mouse,0,NOAEL,LEVEL,5,7.186082239261685,1,1,420
-no adjustment,reproductive developmental,Rabbit,0,NOEL,LEVEL,1,2.378414230005442,1,1,381
-chronic,repeat dose,Monkey,0,LOEL,LEVEL,1,NA,3,1,368
+no adjustment,reproductive developmental,Rabbit,0,NOEL,LEVEL,1,2.378414230005442,1,1,382
+chronic,repeat dose,Monkey,0,LOEL,LEVEL,1,NA,3,1,369
 chronic,repeat dose,Mouse,0,NOEL,LEVEL,1,7.186082239261685,1,1,311
-short-term,repeat dose,Dog,0,LOEL,LEVEL,5,1.681792830507429,3,1,294
-no adjustment,reproductive developmental,Rabbit,0,LOEL,LEVEL,1,2.378414230005442,3,1,268
+short-term,repeat dose,Dog,0,LOEL,LEVEL,5,1.681792830507429,3,1,295
+no adjustment,reproductive developmental,Rabbit,0,LOEL,LEVEL,1,2.378414230005442,3,1,267
 chronic,repeat dose,Mouse,0,LOAEL,LEVEL,1,7.186082239261685,3,1,257
-short-term,repeat dose,Mouse,0,LOEL,LEVEL,5,7.186082239261685,3,1,239
+short-term,repeat dose,Mouse,0,LOEL,LEVEL,5,7.186082239261685,3,1,237
 chronic,repeat dose,Dog,0,NOEL,LEVEL,1,1.681792830507429,1,1,203
 short-term,repeat dose,Rabbit,0,NOAEL,LEVEL,5,2.378414230005442,1,1,183
 chronic,repeat dose,Rat,0,BMDL,BMDL,1,4.229485053762256,1,1,175
-no adjustment,reproductive developmental,Mouse,0,NOEL,LEVEL,1,7.186082239261685,1,1,172
+no adjustment,reproductive developmental,Mouse,0,NOEL,LEVEL,1,7.186082239261685,1,1,173
+short-term,repeat dose,Monkey,0,LOEL,LEVEL,5,NA,3,1,164
 no adjustment,reproductive developmental,Hamster,0,NOAEL,LEVEL,1,NA,1,1,162
-short-term,repeat dose,Monkey,0,LOEL,LEVEL,5,NA,3,1,162
 chronic,repeat dose,Monkey,0,NOAEL,LEVEL,1,NA,1,1,161
 unspecified,repeat dose,Hamster,0,NOAEL,LEVEL,1,NA,1,1,159
 chronic,repeat dose,Dog,0,LOAEL,LEVEL,1,1.681792830507429,3,1,158
-no adjustment,reproductive developmental,Mouse,0,LOEL,LEVEL,1,7.186082239261685,3,1,151
+no adjustment,reproductive developmental,Mouse,0,LOEL,LEVEL,1,7.186082239261685,3,1,147
 short-term,repeat dose,Dog,0,NOAEL,LEVEL,5,1.681792830507429,1,1,145
-no adjustment,reproductive developmental,Mouse,0,LOAEL,LEVEL,1,7.186082239261685,3,1,140
-short-term,repeat dose,Mouse,0,NOEL,LEVEL,5,7.186082239261685,1,1,114
+no adjustment,reproductive developmental,Mouse,0,LOAEL,LEVEL,1,7.186082239261685,3,1,141
+short-term,repeat dose,Mouse,0,NOEL,LEVEL,5,7.186082239261685,1,1,113
 unspecified,repeat dose,Rabbit,0,NOEL,LEVEL,1,2.378414230005442,1,1,109
 unspecified,repeat dose,Mouse,0,NOEL,LEVEL,1,7.186082239261685,1,1,103
-unspecified,repeat dose,Mouse,0,LOAEL,LEVEL,1,7.186082239261685,3,1,98
-short-term,repeat dose,Rabbit,0,NOEL,LEVEL,5,2.378414230005442,1,1,81
+unspecified,repeat dose,Mouse,0,LOAEL,LEVEL,1,7.186082239261685,3,1,97
+short-term,repeat dose,Rabbit,0,NOEL,LEVEL,5,2.378414230005442,1,1,80
 short-term,repeat dose,Mouse,0,LOAEL,LEVEL,5,7.186082239261685,3,1,77
-chronic,repeat dose,Mouse,0,BMDL,BMDL,1,7.186082239261685,1,1,74
-chronic,repeat dose,Rat,0,LOAEL,LEVEL,1,NA,3,1,70
-chronic,repeat dose,Rat,0,NOAEL,LEVEL,1,NA,1,1,67
-short-term,repeat dose,Rabbit,0,LOEL,LEVEL,5,2.378414230005442,3,1,66
+chronic,repeat dose,Mouse,0,BMDL,BMDL,1,7.186082239261685,1,1,75
+chronic,repeat dose,Rat,0,LOEL,LEVEL,1,NA,3,1,73
+short-term,repeat dose,Rabbit,0,LOEL,LEVEL,5,2.378414230005442,3,1,67
+chronic,repeat dose,Rat,0,NOAEL,LEVEL,1,NA,1,1,66
 short-term,repeat dose,Monkey,0,NOAEL,LEVEL,5,NA,1,1,60
-chronic,repeat dose,Rat,0,LOEL,LEVEL,1,NA,3,1,58
 unspecified,repeat dose,Rabbit,0,LOAEL,LEVEL,1,2.378414230005442,3,1,50
 chronic,repeat dose,Rabbit,0,NOAEL,LEVEL,1,2.378414230005442,1,1,49
-no adjustment,reproductive developmental,Dog,0,LOEL,LEVEL,1,1.681792830507429,3,1,49
-chronic,repeat dose,Mouse,0,LOEL,LEVEL,1,NA,3,1,44
+chronic,repeat dose,Mouse,0,LOEL,LEVEL,1,NA,3,1,48
+chronic,repeat dose,Rat,0,LOAEL,LEVEL,1,NA,3,1,48
+no adjustment,reproductive developmental,Dog,0,LOEL,LEVEL,1,1.681792830507429,3,1,48
 no adjustment,reproductive developmental,Rat,0,BMDL,BMDL,1,4.229485053762256,1,1,40
 short-term,repeat dose,Sheep,0,NOAEL,LEVEL,5,NA,1,1,39
+unspecified,repeat dose,Mouse,0,LOEL,LEVEL,1,7.186082239261685,3,1,36
 chronic,repeat dose,Cow Family,0,LOEL,LEVEL,1,NA,3,1,35
 chronic,repeat dose,Mouse,0,NOAEL,LEVEL,1,NA,1,1,34
 unspecified,repeat dose,Human,0,NOAEL,LEVEL,1,1,1,1,34
-unspecified,repeat dose,Mouse,0,LOEL,LEVEL,1,7.186082239261685,3,1,34
 chronic,repeat dose,Rat,1,BMDL,BMDL,1,1,1,1,30
-no adjustment,reproductive developmental,Dog,0,NOAEL,LEVEL,1,1.681792830507429,1,1,30
 chronic,repeat dose,Mouse,0,NOEL,LEVEL,1,NA,1,1,28
-chronic,repeat dose,Rabbit,0,LOEL,LEVEL,1,2.378414230005442,3,1,24
+no adjustment,reproductive developmental,Dog,0,NOAEL,LEVEL,1,1.681792830507429,1,1,27
 chronic,repeat dose,Human,0,NOAEL,LEVEL,1,1,1,1,23
+chronic,repeat dose,Rabbit,0,LOEL,LEVEL,1,2.378414230005442,3,1,23
 no adjustment,reproductive developmental,Rabbit,0,LOAEL,LEVEL,1,2.378414230005442,3,1,23
 short-term,repeat dose,Rat,0,BMDL,BMDL,5,4.229485053762256,1,1,23
-no adjustment,reproductive developmental,Monkey,0,LOEL,LEVEL,1,NA,3,1,22
 unspecified,repeat dose,Rat,0,BMDL,BMDL,1,4.229485053762256,1,1,22
 chronic,repeat dose,Hamster,0,NOAEL,LEVEL,1,NA,1,1,20
 unspecified,repeat dose,Chicken,0,NOAEL,LEVEL,1,NA,1,1,20
+no adjustment,reproductive developmental,Monkey,0,LOEL,LEVEL,1,NA,3,1,19
 no adjustment,reproductive developmental,Monkey,0,NOAEL,LEVEL,1,NA,1,1,19
 unspecified,repeat dose,Rat,0,BMD,BMD,1,4.229485053762256,1,1,19
 chronic,repeat dose,Pig,0,NOAEL,LEVEL,1,NA,1,1,18
@@ -84,9 +84,9 @@ unspecified,repeat dose,Monkey,0,NOAEL,LEVEL,1,NA,1,1,18
 chronic,repeat dose,Monkey,0,NOEL,LEVEL,1,NA,1,1,17
 short-term,repeat dose,Human,0,NOEL,LEVEL,5,1,1,1,17
 unspecified,repeat dose,Hamster,0,NOEL,LEVEL,1,NA,1,1,17
+unspecified,repeat dose,Rabbit,0,LOEL,LEVEL,1,2.378414230005442,3,1,17
 no adjustment,reproductive developmental,Hamster,0,NOEL,LEVEL,1,NA,1,1,16
 no adjustment,reproductive developmental,Rat,0,BMD,BMD,1,4.229485053762256,1,1,16
-unspecified,repeat dose,Rabbit,0,LOEL,LEVEL,1,2.378414230005442,3,1,16
 short-term,repeat dose,Dog,0,LOAEL,LEVEL,5,1.681792830507429,3,1,14
 chronic,repeat dose,Human,0,LOAEL,LEVEL,1,1,3,1,13
 no adjustment,reproductive developmental,Rat,1,BMDL,BMDL,1,1,1,1,13
@@ -100,12 +100,12 @@ unspecified,repeat dose,Dog,0,NOAEL,LEVEL,1,1.681792830507429,1,1,11
 unspecified,repeat dose,Guinea Pig,0,NOAEL,LEVEL,1,NA,1,1,11
 chronic,repeat dose,Dog,0,BMDL,BMDL,1,1.681792830507429,1,1,9
 chronic,repeat dose,Human,0,NOEL,LEVEL,1,1,1,1,9
-chronic,repeat dose,Mouse,0,BMDL,BMDL,1,NA,1,1,9
 chronic,repeat dose,Rat,0,BMDL,BMDL,1,NA,1,1,9
 short-term,repeat dose,Rabbit,0,LOAEL,LEVEL,5,2.378414230005442,3,1,9
 short-term,repeat dose,Rat,1,BMDL,BMDL,5,1,1,1,9
 chronic,repeat dose,Cow Family,0,NOAEL,LEVEL,1,NA,1,1,8
 chronic,repeat dose,Monkey,0,LOAEL,LEVEL,1,NA,3,1,8
+chronic,repeat dose,Mouse,0,BMDL,BMDL,1,NA,1,1,8
 no adjustment,reproductive developmental,Dog,0,NOEL,LEVEL,1,1.681792830507429,1,1,8
 no adjustment,reproductive developmental,Guinea Pig,0,NOAEL,LEVEL,1,NA,1,1,8
 short-term,repeat dose,Cat,0,NOAEL,LEVEL,5,NA,1,1,8
@@ -172,6 +172,7 @@ short-term,repeat dose,Human,0,BMDL,BMDL,5,1,1,1,2
 short-term,repeat dose,Human,0,LOEL,LEVEL,5,1,3,1,2
 short-term,repeat dose,Mouse,0,BMDL,BMDL,5,7.186082239261685,1,1,2
 short-term,repeat dose,Rat,0,BMD,BMD,5,4.229485053762256,1,1,2
+short-term,repeat dose,Rat,0,NOAEL,LEVEL,5,NA,1,1,2
 short-term,repeat dose,Rat,1,LOAEL,LEVEL,5,1,3,1,2
 short-term,repeat dose,Sheep,0,LOEL,LEVEL,5,NA,3,1,2
 unspecified,repeat dose,Dog,0,LOAEL,LEVEL,1,1.681792830507429,3,1,2
@@ -218,7 +219,7 @@ short-term,repeat dose,Mouse,0,LOEL,LEVEL,5,NA,3,1,1
 short-term,repeat dose,"Mouse, Rat",0,LOEL,LEVEL,5,NA,3,1,1
 short-term,repeat dose,Pig,0,BMDL,BMDL,5,NA,1,1,1
 short-term,repeat dose,Rabbit,0,BMDL,BMDL,5,2.378414230005442,1,1,1
-short-term,repeat dose,Rat,0,NOAEL,LEVEL,5,NA,1,1,1
+short-term,repeat dose,Rat,0,LOEL,LEVEL,5,NA,3,1,1
 short-term,repeat dose,Rat,0,NA,NA,5,4.229485053762256,1,1,1
 short-term,repeat dose,Rat,1,NOAEL,LEVEL,5,1,1,1,1
 unspecified,repeat dose,Dog,0,NOEL,LEVEL,1,1.681792830507429,1,1,1
@@ -229,4 +230,5 @@ unspecified,repeat dose,Mouse,0,BMDL,BMDL,1,7.186082239261685,1,1,1
 unspecified,repeat dose,Pig,0,BMDL,BMDL,1,NA,1,1,1
 unspecified,repeat dose,Pig,0,LOAEL,LEVEL,1,NA,3,1,1
 unspecified,repeat dose,Pig,0,NOEL,LEVEL,1,NA,1,1,1
+unspecified,repeat dose,Rat,0,LOEL,LEVEL,1,NA,3,1,1
 unspecified,repeat dose,Rhesus Macaque,0,NOAEL,LEVEL,1,NA,1,1,1

@@ -1,17 +1,17 @@
 common_name,toxval_numeric_hed,final_model1,n_rows
-Monkey,0,continuous,680
+Monkey,0,continuous,672
 Hamster,0,continuous,370
-Rat,0,NA,231
-Monkey,0,quantal-deterministic,164
-Mouse,0,NA,122
-Pig,0,continuous,57
+Rat,0,NA,226
+Monkey,0,quantal-deterministic,168
+Mouse,0,NA,125
+Pig,0,continuous,56
 Chicken,0,continuous,49
 Cow Family,0,continuous,43
-Sheep,0,continuous,40
-Monkey,0,quantal-stochastic,28
+Sheep,0,continuous,39
+Monkey,0,quantal-stochastic,32
 Guinea Pig,0,continuous,27
 Cat,0,continuous,17
-Pig,0,quantal-deterministic,14
+Pig,0,quantal-deterministic,15
 Hamster,0,quantal-stochastic,11
 rodent,0,continuous,5
 Cow Family,0,quantal-deterministic,4
@@ -22,8 +22,8 @@ Rabbit,0,NA,3
 Cat,0,quantal-deterministic,2
 "Mouse, Rat",0,continuous,2
 Rhesus Macaque,0,continuous,2
+Sheep,0,quantal-stochastic,2
 Baboon,0,continuous,1
 Cow Family,0,NA,1
 Dog,0,NA,1
 Rhesus Macaque,0,quantal-deterministic,1
-Sheep,0,quantal-stochastic,1

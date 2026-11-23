@@ -26,6 +26,7 @@ library(dplyr)
 library(stringr)
 library(janitor)
 library(here)
+library(openxlsx)
 
 # =====================================================
 # SETUP
@@ -129,6 +130,44 @@ coalesce_suffix_column <- function(df, base_col, suffix_col) {
   df
 }
 
+derive_base_class <- function(toxval_type) {
+  x <- toupper(as.character(toxval_type))
+  x <- stringr::str_squish(x)
+
+  dplyr::case_when(
+    stringr::str_detect(x, "BMDL|BMCL") ~ "BMDL",
+    stringr::str_detect(x, "\\bBMD\\b|\\bBMC\\b") ~ "BMD",
+
+    stringr::str_detect(x, "NOAEL|NOAEC") ~ "NOA",
+    stringr::str_detect(x, "LOAEL|LOAEC") ~ "LOA",
+
+    stringr::str_detect(
+      x,
+      "\\bNOEL\\b|\\bNOEC\\b|\\bNEL\\b|\\bNEC\\b"
+    ) ~ "NE",
+
+    stringr::str_detect(
+      x,
+      "\\bLOEL\\b|\\bLOEC\\b|\\bLEL\\b|\\bLEC\\b"
+    ) ~ "LE",
+
+    TRUE ~ NA_character_
+  )
+}
+
+
+derive_toxval_type_standard <- function(base_class) {
+  dplyr::case_when(
+    base_class %in% c("NOA", "NOAEL") ~ "NOAEL",
+    base_class %in% c("LOA", "LOAEL") ~ "LOAEL",
+    base_class %in% c("NE", "NOEL", "NEL") ~ "NOEL",
+    base_class %in% c("LE", "LOEL", "LEL") ~ "LOEL",
+    base_class == "BMDL" ~ "BMDL",
+    base_class == "BMD" ~ "BMD",
+    TRUE ~ NA_character_
+  )
+}
+
 # =====================================================
 # TAM DATASETS
 # =====================================================
@@ -225,18 +264,298 @@ drsvs <- tam_all_renamed %>%
 
 saveRDS(
   drsvs,
-  here::here("data", "derived", "drsvs.rds")
+  here::here("data", "derived", "drsvs_all.rds")
 )
 
-drsvs_oral <- tam_all_renamed %>% # oral only
-  filter(toxval_type_supercategory == "Dose Response Summary Value") %>%
-  filter(exposure_route == "Oral") %>%
-  filter(toxval_units == "mg/kg-day")
+#===============================================================================
+# BUILD ORAL DRSV DATASET
+#===============================================================================
+
+drsvs_oral_all <- drsvs %>%
+  dplyr::filter(
+    exposure_route == "Oral",
+    toxval_units == "mg/kg-day"
+  ) %>%
+  dplyr::mutate(
+    row_id = dplyr::row_number()
+  )
+
+#===============================================================================
+# DERIVE DRSV SELECTION FIELDS
+#===============================================================================
+
+drsvs_oral_ranked <- drsvs_oral_all %>%
+  dplyr::mutate(
+    base_class = derive_base_class(toxval_type),
+
+    toxval_type_standard = derive_toxval_type_standard(base_class)
+  )
+
+
+# Retain an existing HED indicator when present; otherwise initialize it to 0.
+if (!"toxval_numeric_hed" %in% names(drsvs_oral_ranked)) {
+  drsvs_oral_ranked$toxval_numeric_hed <- 0L
+}
+
+
+drsvs_oral_ranked <- drsvs_oral_ranked %>%
+  dplyr::mutate(
+    toxval_numeric_hed = dplyr::case_when(
+      as.character(toxval_numeric_hed) %in%
+        c(
+          "1",
+          "TRUE",
+          "True",
+          "true",
+          "yes",
+          "YES"
+        ) ~ 1L,
+
+      TRUE ~ 0L
+    ),
+
+    # Also identify HED values through the DRSV type.
+    toxval_numeric_hed = dplyr::case_when(
+      stringr::str_detect(
+        dplyr::coalesce(
+          as.character(toxval_type),
+          ""
+        ),
+        stringr::regex(
+          "HED|human equivalent",
+          ignore_case = TRUE
+        )
+      ) ~ 1L,
+
+      TRUE ~ toxval_numeric_hed
+    )
+  )
+
+if ("selected_value_basis" %in% names(drsvs_oral_ranked)) {
+  drsvs_oral_ranked <- drsvs_oral_ranked %>%
+    dplyr::mutate(
+      toxval_numeric_hed = dplyr::case_when(
+        stringr::str_detect(
+          dplyr::coalesce(
+            as.character(selected_value_basis),
+            ""
+          ),
+          stringr::regex(
+            "HED|human equivalent",
+            ignore_case = TRUE
+          )
+        ) ~ 1L,
+
+        TRUE ~ toxval_numeric_hed
+      )
+    )
+}
+
+#===============================================================================
+# SELECT ONE DRSV PER CHEMICAL AND STUDY GROUP
+#
+# Priority:
+#   BMDL > NOAEL > LOAEL > NOEL > LOEL > other/unclassified
+#
+# Within each DRSV type, prefer an existing HED value.
+#
+# Missing study_group values are treated as separate records rather than being
+# collapsed into one missing study-group category.
+#===============================================================================
+
+drsvs_oral_before_selection <- drsvs_oral_ranked
+
+drsvs_oral_ranked <- drsvs_oral_ranked %>%
+  dplyr::mutate(
+    drsv_type_priority = dplyr::case_when(
+      toxval_type_standard == "BMDL" ~ 1L,
+      toxval_type_standard == "NOAEL" ~ 2L,
+      toxval_type_standard == "LOAEL" ~ 3L,
+      toxval_type_standard == "NOEL" ~ 4L,
+      toxval_type_standard == "LOEL" ~ 5L,
+      TRUE ~ 99L
+    ),
+
+    hed_priority = dplyr::case_when(
+      toxval_numeric_hed == 1L ~ 1L,
+      TRUE ~ 2L
+    ),
+
+    study_group_selection = dplyr::case_when(
+      !is.na(study_group) &
+        stringr::str_squish(as.character(study_group)) != "" ~
+        stringr::str_squish(as.character(study_group)),
+
+      TRUE ~ paste0(
+        "__missing_study_group_row_",
+        row_id
+      )
+    )
+  )
+
+study_group_selection_ties <- drsvs_oral_ranked %>%
+  dplyr::group_by(
+    cichem_id,
+    study_group_selection
+  ) %>%
+  dplyr::mutate(
+    best_type_priority = min(
+      drsv_type_priority,
+      na.rm = TRUE
+    ),
+
+    best_hed_priority = min(
+      hed_priority[
+        drsv_type_priority == best_type_priority
+      ],
+      na.rm = TRUE
+    )
+  ) %>%
+  dplyr::filter(
+    drsv_type_priority == best_type_priority,
+    hed_priority == best_hed_priority
+  ) %>%
+  dplyr::mutate(
+    n_equally_ranked = dplyr::n()
+  ) %>%
+  dplyr::ungroup() %>%
+  dplyr::filter(
+    n_equally_ranked > 1
+  ) %>%
+  dplyr::arrange(
+    cichem_id,
+    study_group_selection,
+    row_id
+  )
+
+
+study_group_selection_ties_summary <-
+  study_group_selection_ties %>%
+  dplyr::group_by(
+    cichem_id,
+    study_group_selection
+  ) %>%
+  dplyr::summarise(
+    n_equally_ranked = dplyr::n(),
+
+    selected_row_id = min(
+      row_id,
+      na.rm = TRUE
+    ),
+
+    candidate_row_ids = paste(
+      sort(unique(row_id)),
+      collapse = "|"
+    ),
+
+    candidate_types = paste(
+      sort(
+        unique(
+          stats::na.omit(toxval_type_standard)
+        )
+      ),
+      collapse = "|"
+    ),
+
+    candidate_hed_status = paste(
+      sort(
+        unique(
+          stats::na.omit(toxval_numeric_hed)
+        )
+      ),
+      collapse = "|"
+    ),
+
+    .groups = "drop"
+  )
+
+drsvs_oral <- drsvs_oral_ranked %>%
+  dplyr::arrange(
+    cichem_id,
+    study_group_selection,
+    drsv_type_priority,
+    hed_priority,
+    row_id
+  ) %>%
+  dplyr::group_by(
+    cichem_id,
+    study_group_selection
+  ) %>%
+  dplyr::slice_head(n = 1) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(
+    study_group_selection_reason = paste0(
+      "Selected ",
+      dplyr::coalesce(
+        toxval_type_standard,
+        "unclassified"
+      ),
+      "; ",
+      dplyr::if_else(
+        toxval_numeric_hed == 1L,
+        "existing HED preferred",
+        "non-HED selected"
+      )
+    )
+  )
+
+study_group_selection_summary <- tibble::tibble(
+  metric = c(
+    "n_rows_before_study_group_selection",
+    "n_rows_after_study_group_selection",
+    "n_rows_removed_by_study_group_selection",
+    "n_unique_chemical_study_groups",
+    "n_selected_existing_HED",
+    "n_selected_non_HED",
+    "n_study_groups_with_equally_ranked_candidates",
+    "n_selected_unclassified_DRSV_types"
+  ),
+
+  value = c(
+    nrow(drsvs_oral_before_selection),
+
+    nrow(drsvs_oral),
+
+    nrow(drsvs_oral_before_selection) -
+      nrow(drsvs_oral),
+
+    drsvs_oral %>%
+      dplyr::distinct(
+        cichem_id,
+        study_group_selection
+      ) %>%
+      nrow(),
+
+    sum(
+      drsvs_oral$toxval_numeric_hed == 1L,
+      na.rm = TRUE
+    ),
+
+    sum(
+      drsvs_oral$toxval_numeric_hed != 1L,
+      na.rm = TRUE
+    ),
+
+    study_group_selection_ties %>%
+      dplyr::distinct(
+        cichem_id,
+        study_group_selection
+      ) %>%
+      nrow(),
+
+    sum(
+      drsvs_oral$drsv_type_priority == 99L,
+      na.rm = TRUE
+    )
+  )
+)
 
 saveRDS(
   drsvs_oral,
   here::here("data", "derived", "hazard_landscape_drsvs.rds")
 )
+
+# assessment values
 
 tam_assess <- tam_all_renamed %>%
   clean_names() %>%
@@ -591,6 +910,275 @@ saveRDS(
 saveRDS(
   b_mc7_assay,
   here::here("data", "derived", "b_mc7_assay.rds")
+)
+
+#===============================================================================
+# EXPORT CHEMICAL IDENTIFIERS AND POTENCY DATA AVAILABILITY
+#
+# One row per ROCKS inventory chemical, defined by cichem_id.
+#
+# Potency availability definitions:
+#   TAM:         at least one positive, nonmissing toxval_numeric
+#   InvitroDB:   chemical present in the MC7 AED summary
+#   Broad:       chemical present in the Broad Profiling screening table
+#===============================================================================
+
+message("\nBuilding chemical potency availability table...")
+
+
+# Helper to return the first nonmissing, nonblank value.
+first_nonmissing <- function(x) {
+  x <- as.character(x)
+  x <- x[!is.na(x) & stringr::str_squish(x) != ""]
+
+  if (length(x) == 0) {
+    return(NA_character_)
+  }
+
+  x[[1]]
+}
+
+
+#-------------------------------------------------------------------------------
+# TAM potency availability
+#-------------------------------------------------------------------------------
+
+tam_for_coverage <- tam_all_renamed %>%
+  janitor::clean_names() %>%
+  normalize_id_types()
+
+
+# Map TAM records to cichem_id if needed or fill missing cichem_id values.
+tam_for_coverage <- add_cichem_id_from_dtxsid(
+  tam_for_coverage,
+  id_crosswalk
+)
+
+
+tam_potency_flag <- tam_for_coverage %>%
+  dplyr::filter(
+    !is.na(cichem_id),
+    cichem_id != "",
+    !is.na(toxval_numeric),
+    toxval_numeric > 0
+  ) %>%
+  dplyr::distinct(cichem_id) %>%
+  dplyr::mutate(
+    has_tam_potency = "Yes"
+  )
+
+
+# Retain one TAM chemical name per cichem_id.
+tam_chemical_names <- tam_for_coverage %>%
+  dplyr::filter(
+    !is.na(cichem_id),
+    cichem_id != ""
+  ) %>%
+  dplyr::group_by(cichem_id) %>%
+  dplyr::summarise(
+    chemical_name_tam = first_nonmissing(chemical_name),
+    .groups = "drop"
+  )
+
+
+#-------------------------------------------------------------------------------
+# InvitroDB potency availability
+#
+# b_mc7_aed is the InvitroDB AED/potency summary dataset.
+#-------------------------------------------------------------------------------
+
+invitrodb_potency_flag <- b_mc7_aed %>%
+  normalize_id_types() %>%
+  dplyr::filter(
+    !is.na(cichem_id),
+    cichem_id != ""
+  ) %>%
+  dplyr::distinct(cichem_id) %>%
+  dplyr::mutate(
+    has_invitrodb_potency = "Yes"
+  )
+
+
+#-------------------------------------------------------------------------------
+# Broad Profiling potency availability
+#
+# Presence in bp is treated as availability of Broad Profiling screening data.
+#-------------------------------------------------------------------------------
+
+broad_profiling_potency_flag <- bp %>%
+  normalize_id_types() %>%
+  dplyr::filter(
+    !is.na(cichem_id),
+    cichem_id != ""
+  ) %>%
+  dplyr::distinct(cichem_id) %>%
+  dplyr::mutate(
+    has_broad_profiling_potency = "Yes"
+  )
+
+
+#-------------------------------------------------------------------------------
+# Build one-row-per-chemical identifier table
+#-------------------------------------------------------------------------------
+
+chemical_identifier_table <- rocks %>%
+  normalize_id_types() %>%
+  dplyr::group_by(cichem_id) %>%
+  dplyr::summarise(
+    dtxsid = first_nonmissing(dtxsid),
+    casrn = first_nonmissing(casrn),
+
+    chemical_name_rocks = if ("chemical_name" %in% names(rocks)) {
+      first_nonmissing(chemical_name)
+    } else {
+      NA_character_
+    },
+
+    smiles = first_nonmissing(smiles),
+    inchi = first_nonmissing(inchi),
+    .groups = "drop"
+  ) %>%
+  dplyr::left_join(
+    tam_chemical_names,
+    by = "cichem_id"
+  ) %>%
+  dplyr::mutate(
+    chemical_name = dplyr::coalesce(
+      chemical_name_rocks,
+      chemical_name_tam
+    )
+  ) %>%
+  dplyr::select(
+    cichem_id,
+    dtxsid,
+    casrn,
+    chemical_name,
+    smiles,
+    inchi
+  )
+
+
+#-------------------------------------------------------------------------------
+# Join potency flags
+#-------------------------------------------------------------------------------
+
+chemical_potency_availability <- chemical_identifier_table %>%
+  dplyr::left_join(
+    tam_potency_flag,
+    by = "cichem_id"
+  ) %>%
+  dplyr::left_join(
+    invitrodb_potency_flag,
+    by = "cichem_id"
+  ) %>%
+  dplyr::left_join(
+    broad_profiling_potency_flag,
+    by = "cichem_id"
+  ) %>%
+  dplyr::mutate(
+    has_tam_potency = dplyr::coalesce(
+      has_tam_potency,
+      "No"
+    ),
+
+    has_invitrodb_potency = dplyr::coalesce(
+      has_invitrodb_potency,
+      "No"
+    ),
+
+    has_broad_profiling_potency = dplyr::coalesce(
+      has_broad_profiling_potency,
+      "No"
+    ),
+
+    has_any_potency = dplyr::if_else(
+      has_tam_potency == "Yes" |
+        has_invitrodb_potency == "Yes" |
+        has_broad_profiling_potency == "Yes",
+      "Yes",
+      "No"
+    )
+  ) %>%
+  dplyr::arrange(
+    chemical_name,
+    cichem_id
+  )
+
+
+# Confirm that the export remains one row per cichem_id.
+if (anyDuplicated(chemical_potency_availability$cichem_id) > 0) {
+  stop(
+    "chemical_potency_availability contains duplicated cichem_id values."
+  )
+}
+
+
+#-------------------------------------------------------------------------------
+# Create a summary sheet
+#-------------------------------------------------------------------------------
+
+chemical_potency_summary <- tibble::tibble(
+  metric = c(
+    "Total ROCKS chemicals",
+    "Chemicals with TAM potency information",
+    "Chemicals with InvitroDB potency information",
+    "Chemicals with Broad Profiling potency information",
+    "Chemicals with any potency information",
+    "Chemicals with no potency information"
+  ),
+
+  n_chemicals = c(
+    nrow(chemical_potency_availability),
+
+    sum(
+      chemical_potency_availability$has_tam_potency == "Yes"
+    ),
+
+    sum(
+      chemical_potency_availability$has_invitrodb_potency == "Yes"
+    ),
+
+    sum(
+      chemical_potency_availability$has_broad_profiling_potency == "Yes"
+    ),
+
+    sum(
+      chemical_potency_availability$has_any_potency == "Yes"
+    ),
+
+    sum(
+      chemical_potency_availability$has_any_potency == "No"
+    )
+  )
+)
+
+
+#-------------------------------------------------------------------------------
+# Write Excel workbook
+#-------------------------------------------------------------------------------
+
+potency_export_path <- here::here(
+  "manuscript",
+  "chemical_potency_availability.xlsx"
+)
+
+
+openxlsx::write.xlsx(
+  x = list(
+    chemical_availability = chemical_potency_availability,
+    summary = chemical_potency_summary
+  ),
+  file = potency_export_path,
+  asTable = TRUE,
+  overwrite = TRUE,
+  freezePane = TRUE,
+  autoFilter = TRUE
+)
+
+
+message(
+  "Chemical potency availability workbook saved to: ",
+  potency_export_path
 )
 
 # =====================================================
