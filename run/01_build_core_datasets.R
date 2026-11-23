@@ -197,7 +197,7 @@ tam_all <- lapply(tamdb_tables, function(db_table) {
 }) %>%
   dplyr::bind_rows()
 
-# Add coallesce fields across tables to common field name
+# Add coalesce fields across tables to common field name
 tam_all_renamed <- tam_all %>%
   dplyr::mutate(
     toxval_type = dplyr::coalesce(
