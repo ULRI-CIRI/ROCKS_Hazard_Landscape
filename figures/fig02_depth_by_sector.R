@@ -28,7 +28,11 @@ broad_profiling <- readr::read_csv(
 rocks <- readRDS(here::here("data", "derived", "rocks.rds"))
 tam <- readRDS(here::here("data", "derived", "tam.rds"))
 tam_assess <- readRDS(here::here("data", "derived", "tam_assess.rds"))
-b_assay_data_sum <- readRDS(here::here("data", "derived", "b_assay_data_sum.rds"))
+b_assay_data_sum <- readRDS(here::here(
+  "data",
+  "derived",
+  "b_assay_data_sum.rds"
+))
 b_mc7_assay <- readRDS(here::here("data", "derived", "b_mc7_assay.rds"))
 b_exec_sum <- readRDS(
   here("data", "derived", "b_exec_sum.rds")
@@ -60,7 +64,9 @@ pick_col <- function(df, candidates, required = TRUE) {
     )
   }
 
-  if (length(hit) == 0) return(NA_character_)
+  if (length(hit) == 0) {
+    return(NA_character_)
+  }
 
   hit[[1]]
 }
@@ -103,9 +109,11 @@ fallback_sector_cols <- c(
 
 rocks2 <- rocks %>%
   mutate(
-    any_primary_sector =
-      rowSums(across(all_of(primary_sector_cols),
-                     ~ replace_na(.x, 0))) > 0
+    any_primary_sector = rowSums(across(
+      all_of(primary_sector_cols),
+      ~ replace_na(.x, 0)
+    )) >
+      0
   )
 
 sector_long <- rocks2 %>%
@@ -140,15 +148,15 @@ fallback_sector_long <- rocks2 %>%
     names_to = "sector",
     values_to = "in_sector"
   ) %>%
-mutate(
-  in_sector = in_sector == 1,
-  sector = clean_sector_name(sector),
-  sector = dplyr::recode(
-    sector,
-    "Biomonitoring" = "Unknown\nBiomonitoring",
-    "Env Monitoring" = "Unknown\nEnv. Monitoring"
-  )
-) %>%
+  mutate(
+    in_sector = in_sector == 1,
+    sector = clean_sector_name(sector),
+    sector = dplyr::recode(
+      sector,
+      "Biomonitoring" = "Unknown\nBiomonitoring",
+      "Env Monitoring" = "Unknown\nEnv. Monitoring"
+    )
+  ) %>%
   filter(
     in_sector,
     !is.na(chem_id),
@@ -159,8 +167,7 @@ mutate(
 unknown_sector_long <- rocks2 %>%
   filter(
     !any_primary_sector,
-    rowSums(across(all_of(fallback_sector_cols),
-                   ~ replace_na(.x, 0))) == 0
+    rowSums(across(all_of(fallback_sector_cols), ~ replace_na(.x, 0))) == 0
   ) %>%
   transmute(
     chem_id = .data[[id_col_rocks]],
@@ -178,30 +185,19 @@ sector_long <- bind_rows(
 # 3. In vivo DRSV depth per chemical
 # ------------------------------------------------------------
 
-id_col_tam <- "cichem_id"
-
-study_col_tam <- "source_hash"
-
-if (is.na(study_col_tam)) {
-  message("No study-level identifier found. Using toxval_id/row-level DRSV record counts instead.")
-  study_col_tam <- pick_col(tam, c("toxval_id"), required = TRUE)
-}
-
-toxval_id_col <- pick_col(tam, c("toxval_id"), required = FALSE)
-
 drsv_depth <- tam %>%
-  filter(toxval_type_supercategory == "Dose Response Summary Value") %>%
-  filter(!is.na(.data[[id_col_tam]]), .data[[id_col_tam]] != "") %>%
-  group_by(chem_id = .data[[id_col_tam]]) %>%
+  filter(
+    toxval_type_supercategory == "Dose Response Summary Value",
+    !is.na(cichem_id),
+    cichem_id != "",
+    !is.na(study_group)
+  ) %>%
+  group_by(cichem_id) %>%
   summarise(
-    n_in_vivo_drsv_studies = n_distinct(.data[[study_col_tam]], na.rm = TRUE),
-    n_in_vivo_drsv_records = if (!is.na(toxval_id_col)) {
-      n_distinct(.data[[toxval_id_col]], na.rm = TRUE)
-    } else {
-      n()
-    },
+    n_drsv_study_groups = n_distinct(study_group),
     .groups = "drop"
   )
+
 
 # ------------------------------------------------------------
 # 4. In vitro targeted assay endpoint depth per chemical
@@ -210,8 +206,7 @@ drsv_depth <- tam %>%
 targeted_depth <- b_exec_sum %>%
   transmute(
     chem_id = .data[["cichem_id"]],
-    n_in_vitro_targeted_assay_endpoints =
-      as.numeric(n_assay_endpoints_tested)
+    n_in_vitro_targeted_assay_endpoints = as.numeric(n_assay_endpoints_tested)
   ) %>%
   distinct()
 
@@ -253,7 +248,7 @@ broad_depth <- broad_profiling %>%
 depth_by_sector <- sector_long %>%
   left_join(
     drsv_depth,
-    by = "chem_id"
+    by = c("chem_id" = "cichem_id")
   ) %>%
   left_join(
     targeted_depth,
@@ -264,12 +259,8 @@ depth_by_sector <- sector_long %>%
     by = "chem_id"
   ) %>%
   mutate(
-    n_in_vivo_drsv_studies = replace_na(
-      n_in_vivo_drsv_studies,
-      0L
-    ),
-    n_in_vivo_drsv_records = replace_na(
-      n_in_vivo_drsv_records,
+    n_drsv_study_groups = replace_na(
+      n_drsv_study_groups,
       0L
     ),
     n_in_vitro_targeted_assay_endpoints = replace_na(
@@ -290,14 +281,14 @@ threshold_df <- depth_by_sector %>%
   select(
     chem_id,
     sector,
-    n_in_vivo_drsv_studies,
+    n_drsv_study_groups,
     n_in_vitro_targeted_assay_endpoints,
     n_broad_profiling_unique_pods
   ) %>%
   distinct() %>%
   pivot_longer(
     cols = c(
-      n_in_vivo_drsv_studies,
+      n_drsv_study_groups,
       n_in_vitro_targeted_assay_endpoints,
       n_broad_profiling_unique_pods
     ),
@@ -307,7 +298,7 @@ threshold_df <- depth_by_sector %>%
   mutate(
     stream = recode(
       stream,
-      n_in_vivo_drsv_studies = "In vivo",
+      n_drsv_study_groups = "In vivo",
       n_in_vitro_targeted_assay_endpoints = "Targeted",
       n_broad_profiling_unique_pods = "Broad profiling"
     ),
@@ -318,16 +309,16 @@ threshold_df <- depth_by_sector %>%
   )
 
 threshold_lookup <- tibble::tribble(
-  ~stream,             ~threshold_label, ~threshold_value, ~threshold_order,
-  "In vivo",           "≥1",             1,                1,
-  "In vivo",           "≥2",             2,                2,
-  "In vivo",           "≥5",             5,                3,
-  "Targeted",          "≥1",             1,                1,
-  "Targeted",          "≥100",           100,              2,
-  "Targeted",          "≥300",           300,              3,
-  "Broad profiling",   "≥1",             1,                1,
-  "Broad profiling",   "≥2",             2,                2,
-  "Broad profiling",   "≥4",             4,                3
+  ~stream           , ~threshold_label , ~threshold_value , ~threshold_order ,
+  "In vivo"         , "≥1"             ,                1 ,                1 ,
+  "In vivo"         , "≥2"             ,                2 ,                2 ,
+  "In vivo"         , "≥5"             ,                5 ,                3 ,
+  "Targeted"        , "≥1"             ,                1 ,                1 ,
+  "Targeted"        , "≥100"           ,              100 ,                2 ,
+  "Targeted"        , "≥300"           ,              300 ,                3 ,
+  "Broad profiling" , "≥1"             ,                1 ,                1 ,
+  "Broad profiling" , "≥2"             ,                2 ,                2 ,
+  "Broad profiling" , "≥4"             ,                4 ,                3
 )
 
 # ------------------------------------------------------------
@@ -440,12 +431,12 @@ threshold_broad <- threshold_counts %>%
 
 # Add assessment annotation----
 
-
 assessment_chems <- tam_assess %>%
   filter(
-    population %in% c(
-      "General Population"
-    )
+    population %in%
+      c(
+        "General Population"
+      )
   ) %>%
   distinct(
     chem_id = .data[["cichem_id"]]
@@ -504,10 +495,7 @@ p_threshold_pct <- ggplot() +
       "≥300" = "#c05c54"
     ),
     breaks = c("≥1", "≥100", "≥300"),
-    guide = guide_legend(order =3,
-      nrow = 1,
-      title.position = "top"
-    )
+    guide = guide_legend(order = 3, nrow = 1, title.position = "top")
   ) +
 
   ggnewscale::new_scale_fill() +
@@ -533,10 +521,7 @@ p_threshold_pct <- ggplot() +
       "≥5" = "#38a0a3"
     ),
     breaks = c("≥1", "≥2", "≥5"),
-    guide = guide_legend(order =2,
-      nrow = 1,
-      title.position = "top"
-    )
+    guide = guide_legend(order = 2, nrow = 1, title.position = "top")
   ) +
 
   ggnewscale::new_scale_fill() +
@@ -562,23 +547,20 @@ p_threshold_pct <- ggplot() +
       "≥4" = "#2b6e65"
     ),
     breaks = c("≥1", "≥2", "≥4"),
-    guide = guide_legend(order=4,
-      nrow = 1,
-      title.position = "top"
-    )
+    guide = guide_legend(order = 4, nrow = 1, title.position = "top")
   ) +
 
   # Assessment-value annotation
-scale_linetype_manual(
-  name = NULL,
-  values = c("Assessment values" = 1),
-  guide = guide_legend(order = 1)
-) +
-scale_shape_manual(
-  name = NULL,
-  values = c("Assessment values" = 21),
-  guide = guide_legend(order = 1)
-) +
+  scale_linetype_manual(
+    name = NULL,
+    values = c("Assessment values" = 1),
+    guide = guide_legend(order = 1)
+  ) +
+  scale_shape_manual(
+    name = NULL,
+    values = c("Assessment values" = 21),
+    guide = guide_legend(order = 1)
+  ) +
   geom_line(
     data = assessment_by_sector,
     aes(
@@ -605,11 +587,11 @@ scale_shape_manual(
     fill = "white"
   ) +
 
-facet_wrap(
-  ~ stream,
-  nrow = 1,
-  drop = FALSE
-) +
+  facet_wrap(
+    ~stream,
+    nrow = 1,
+    drop = FALSE
+  ) +
   scale_y_continuous(
     labels = label_percent(scale = 1),
     expand = expansion(mult = c(0, 0.06))
@@ -620,7 +602,7 @@ facet_wrap(
   ) +
   theme_minimal(base_size = 16) +
   theme(
-    strip.text = element_text(face = "bold",size=18),
+    strip.text = element_text(face = "bold", size = 18),
     panel.grid.minor = element_blank(),
     axis.text.x = element_text(
       angle = 35,
@@ -655,4 +637,3 @@ message(
     "rocks_depth_threshold_pct_by_sector.png"
   )
 )
-

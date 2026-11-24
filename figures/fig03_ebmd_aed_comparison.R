@@ -282,27 +282,25 @@ col_hed <- "#BCE4F7"
 col_aed <- "#0A32FF"
 
 legend_labels <- c(
-  "Minimum AED" =
-    paste0(
-      "Minimum AED (n=",
-      comma(
-        potency_summary$n_chem[
-          potency_summary$metric == "Minimum AED"
-        ]
-      ),
-      ")"
+  "Minimum AED" = paste0(
+    "Minimum AED (n=",
+    comma(
+      potency_summary$n_chem[
+        potency_summary$metric == "Minimum AED"
+      ]
     ),
+    ")"
+  ),
 
-  "p05 eBMDHED" =
-    paste0(
-      "p05 eBMDHED (n=",
-      comma(
-        potency_summary$n_chem[
-          potency_summary$metric == "p05 eBMDHED"
-        ]
-      ),
-      ")"
-    )
+  "p05 eBMDHED" = paste0(
+    "p05 eBMDHED (n=",
+    comma(
+      potency_summary$n_chem[
+        potency_summary$metric == "p05 eBMDHED"
+      ]
+    ),
+    ")"
+  )
 )
 
 p_potency_overlap <- ggplot(
@@ -313,18 +311,18 @@ p_potency_overlap <- ggplot(
   )
 ) +
 
-geom_histogram(
-  aes(
-    fill = metric,
-    y = after_stat(density)
-  ),
-  position = "identity",
-  bins = 40
-) +
+  geom_histogram(
+    aes(
+      fill = metric,
+      y = after_stat(density)
+    ),
+    position = "identity",
+    bins = 40
+  ) +
 
-geom_density(
-  linewidth = 1.5
-) +
+  geom_density(
+    linewidth = 1.5
+  ) +
 
   # median lines
   geom_vline(
@@ -337,21 +335,21 @@ geom_density(
     linewidth = 1
   ) +
 
-scale_fill_manual(
-  values = c(
-    "Minimum AED" = col_aed,
-    "p05 eBMDHED" = col_hed
-  ),
-  labels = legend_labels
-) +
+  scale_fill_manual(
+    values = c(
+      "Minimum AED" = col_aed,
+      "p05 eBMDHED" = col_hed
+    ),
+    labels = legend_labels
+  ) +
 
-scale_color_manual(
-  values = c(
-    "Minimum AED" = "#1d4169",
-    "p05 eBMDHED" = "#3bb3d8"
-  ),
-  labels = legend_labels
-)+
+  scale_color_manual(
+    values = c(
+      "Minimum AED" = "#1d4169",
+      "p05 eBMDHED" = "#3bb3d8"
+    ),
+    labels = legend_labels
+  ) +
 
   scale_x_continuous(
     breaks = seq(-8, 6, by = 1),
@@ -379,7 +377,7 @@ scale_color_manual(
 p_potency_overlap
 
 #========================================================
-# Save figure 
+# Save figure
 #========================================================
 
 ggsave(
@@ -514,7 +512,7 @@ panel_a <- ggplot(
   ) +
 
   labs(
-    x = "% of ROCKS inventory",
+    x = "% of ROCKS collection",
     y = NULL
   ) +
 
@@ -800,11 +798,12 @@ plot_df_top <- plot_df_top %>%
   ) %>%
   mutate(
     class_label = paste0(
-  str_wrap(class, 20),
-  "\n(n=",
-  comma(n_chem),
-  ")"
-))
+      str_wrap(class, 20),
+      "\n(n=",
+      comma(n_chem),
+      ")"
+    )
+  )
 
 
 #========================================================
@@ -820,8 +819,8 @@ assess_class <- tam_assess %>%
     population == "General Population"
   ) %>%
   filter(
-    toxval_units=="mg/kg-day"
-  )%>%
+    toxval_units == "mg/kg-day"
+  ) %>%
   filter(
     !is.na(toxval_numeric),
     toxval_numeric > 0
@@ -1016,44 +1015,42 @@ p_class_box <- ggplot(
   labs(
     x = expression(
       log[10] *
-      "(chemical-level potency)"
+        "(chemical-level potency)"
     ),
     y = NULL,
     fill = NULL
   ) +
-scale_x_continuous(
-  breaks = seq(-6, 5, by = 1),
-  minor_breaks = seq(-6, 5, by = 0.5)
-)+
+  scale_x_continuous(
+    breaks = seq(-6, 5, by = 1),
+    minor_breaks = seq(-6, 5, by = 0.5)
+  ) +
 
-  theme_minimal(base_size=16) +
+  theme_minimal(base_size = 16) +
   theme(
     legend.position = "bottom",
     panel.grid.minor = element_blank(),
     axis.text.y = element_text(size = 14)
-  )+
-coord_flip(clip = "off") +
+  ) +
+  coord_flip(clip = "off") +
 
-theme(
-  legend.position = "bottom",
-  legend.text = element_text(size = 16),
-  legend.key.size = unit(1.1,"cm"),
-  panel.grid.minor = element_blank(),
-  axis.text.y = element_text(size = 14),
-  axis.text.x = element_text(
-    angle = 45,
-    hjust = 1,
-    size = 14
-  ),
-  plot.margin = margin(10, 20, 20, 80)
-)
+  theme(
+    legend.position = "bottom",
+    legend.text = element_text(size = 16),
+    legend.key.size = unit(1.1, "cm"),
+    panel.grid.minor = element_blank(),
+    axis.text.y = element_text(size = 14),
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1,
+      size = 14
+    ),
+    plot.margin = margin(10, 20, 20, 80)
+  )
 
 p_class_box
 
 ggsave(
-    file.path(out_dir,
-    "fig03_potency_by_class.png"
-  ),
+  file.path(out_dir, "fig03_potency_by_class.png"),
   plot = p_class_box,
   width = 14,
   height = 9
@@ -1131,12 +1128,18 @@ class_rank_correlations <- tibble(
     "p05 eBMDHED vs assessment values"
   ),
   n_classes = c(
-    sum(complete.cases(class_rank_compare$median_aed,
-                       class_rank_compare$median_hed)),
-    sum(complete.cases(class_rank_compare$median_aed,
-                       class_rank_compare$median_assess)),
-    sum(complete.cases(class_rank_compare$median_hed,
-                       class_rank_compare$median_assess))
+    sum(complete.cases(
+      class_rank_compare$median_aed,
+      class_rank_compare$median_hed
+    )),
+    sum(complete.cases(
+      class_rank_compare$median_aed,
+      class_rank_compare$median_assess
+    )),
+    sum(complete.cases(
+      class_rank_compare$median_hed,
+      class_rank_compare$median_assess
+    ))
   ),
   spearman_rho = c(
     cor(
@@ -1297,8 +1300,7 @@ potency_test_df <- potency_overlap %>%
 
 # Confirm exactly one paired observation per chemical
 stopifnot(
-  nrow(potency_test_df) ==
-    n_distinct(potency_test_df$cichem_id)
+  nrow(potency_test_df) == n_distinct(potency_test_df$cichem_id)
 )
 
 #--------------------------------------------------------
@@ -1325,32 +1327,113 @@ potency_effect_summary <- potency_test_df %>%
   summarise(
     n_chem = n(),
 
-    median_minimum_aed =
-      median(minimum_aed),
+    median_minimum_aed = median(minimum_aed),
 
-    median_p05_ebmdhed =
-      median(ebmdhed_p05),
+    median_p05_ebmdhed = median(ebmdhed_p05),
 
-    median_log10_ratio =
-      median(log10_ratio),
+    median_log10_ratio = median(log10_ratio),
 
-    median_aed_to_ebmdhed_ratio =
-      median(potency_ratio),
+    median_aed_to_ebmdhed_ratio = median(potency_ratio),
 
-    median_fold_lower =
-      1 / median(potency_ratio),
+    median_fold_lower = 1 / median(potency_ratio),
 
-    n_aed_more_potent =
-      sum(aed_more_potent),
+    n_aed_more_potent = sum(aed_more_potent),
 
-    n_ebmdhed_more_potent =
-      sum(minimum_aed > ebmdhed_p05),
+    n_ebmdhed_more_potent = sum(minimum_aed > ebmdhed_p05),
 
-    n_equal =
-      sum(equal_potency),
+    n_equal = sum(equal_potency),
 
-    pct_aed_more_potent =
-      100 * mean(aed_more_potent)
+    pct_aed_more_potent = 100 * mean(aed_more_potent),
+
+    pct_within_1_log10 = 100 * mean(abs(log10_ratio) <= 1),
+
+    n_within_1_log10 = sum(abs(log10_ratio) <= 1)
   )
 
-print(potency_effect_summary)
+print(potency_effect_summary, width = Inf)
+
+#========================================================
+# Sensitivity analysis:
+# Require >= 5 HED records per chemical
+#========================================================
+
+hed_plot_n5 <- hed_p_by_chem_ebmdhed %>%
+  filter(
+    !is.na(hed_p05),
+    hed_p05 > 0,
+    n_hed_values >= 5
+  ) %>%
+  semi_join(
+    rocks_ids,
+    by = "cichem_id"
+  ) %>%
+  select(
+    cichem_id,
+    ebmdhed_p05 = hed_p05,
+    n_hed_values
+  )
+
+
+# Restrict to chemicals with both AED and eBMDHED values
+potency_overlap_n5 <- inner_join(
+  hed_plot_n5,
+  aed_plot,
+  by = "cichem_id"
+)
+
+
+#========================================================
+# Paired comparison
+#========================================================
+
+potency_test_n5 <- potency_overlap_n5 %>%
+  transmute(
+    cichem_id,
+    n_hed_values,
+    minimum_aed,
+    ebmdhed_p05,
+
+    log10_aed = log10(minimum_aed),
+    log10_ebmdhed = log10(ebmdhed_p05),
+
+    log10_ratio = log10(minimum_aed / ebmdhed_p05),
+    potency_ratio = minimum_aed / ebmdhed_p05,
+
+    aed_more_potent = minimum_aed < ebmdhed_p05,
+    equal_potency = minimum_aed == ebmdhed_p05
+  ) %>%
+  filter(
+    is.finite(log10_aed),
+    is.finite(log10_ebmdhed),
+    is.finite(log10_ratio)
+  )
+
+
+#========================================================
+# Summary
+#========================================================
+
+potency_effect_summary_n5 <- potency_test_n5 %>%
+  summarise(
+    n_chem = n(),
+
+    median_minimum_aed = median(minimum_aed),
+    median_p05_ebmdhed = median(ebmdhed_p05),
+
+    median_log10_ratio = median(log10_ratio),
+    median_abs_log10_difference = median(abs(log10_ratio)),
+
+    median_aed_to_ebmdhed_ratio = median(potency_ratio),
+    median_fold_lower = 1 / median(potency_ratio),
+
+    n_aed_more_potent = sum(aed_more_potent),
+    n_ebmdhed_more_potent = sum(minimum_aed > ebmdhed_p05),
+    n_equal = sum(equal_potency),
+
+    pct_aed_more_potent = 100 * mean(aed_more_potent),
+
+    n_within_1_log10 = sum(abs(log10_ratio) <= 1),
+    pct_within_1_log10 = 100 * mean(abs(log10_ratio) <= 1)
+  )
+
+print(potency_effect_summary_n5, width = Inf)

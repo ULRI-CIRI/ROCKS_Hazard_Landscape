@@ -1,4 +1,3 @@
-
 # =============================================================================
 # Analyze concordance between HED p05 and AED p05
 # =============================================================================
@@ -91,20 +90,46 @@ p5_hed_aed_analysis <- p5_hed_aed %>%
 
     # Optional categorical bins for plots.
     aed_depth_bin = case_when(
-      n_aed_ac50_sumcl50 <= quantile(n_aed_ac50_sumcl50, 1 / 3, na.rm = TRUE) ~ "Low AED endpoint depth",
-      n_aed_ac50_sumcl50 <= quantile(n_aed_ac50_sumcl50, 2 / 3, na.rm = TRUE) ~ "Medium AED endpoint depth",
+      n_aed_ac50_sumcl50 <=
+        quantile(
+          n_aed_ac50_sumcl50,
+          1 / 3,
+          na.rm = TRUE
+        ) ~ "Low AED endpoint depth",
+      n_aed_ac50_sumcl50 <=
+        quantile(
+          n_aed_ac50_sumcl50,
+          2 / 3,
+          na.rm = TRUE
+        ) ~ "Medium AED endpoint depth",
       TRUE ~ "High AED endpoint depth"
     ),
 
     active_pct_bin = case_when(
-      pct_assay_endpoints_active <= quantile(pct_assay_endpoints_active, 1 / 3, na.rm = TRUE) ~ "Low % active endpoints",
-      pct_assay_endpoints_active <= quantile(pct_assay_endpoints_active, 2 / 3, na.rm = TRUE) ~ "Medium % active endpoints",
+      pct_assay_endpoints_active <=
+        quantile(
+          pct_assay_endpoints_active,
+          1 / 3,
+          na.rm = TRUE
+        ) ~ "Low % active endpoints",
+      pct_assay_endpoints_active <=
+        quantile(
+          pct_assay_endpoints_active,
+          2 / 3,
+          na.rm = TRUE
+        ) ~ "Medium % active endpoints",
       TRUE ~ "High % active endpoints"
     ),
 
     hed_depth_bin = case_when(
-      n_hed_values <= quantile(n_hed_values, 1 / 3, na.rm = TRUE) ~ "Low HED evidence depth",
-      n_hed_values <= quantile(n_hed_values, 2 / 3, na.rm = TRUE) ~ "Medium HED evidence depth",
+      n_hed_values <=
+        quantile(n_hed_values, 1 / 3, na.rm = TRUE) ~ "Low HED evidence depth",
+      n_hed_values <=
+        quantile(
+          n_hed_values,
+          2 / 3,
+          na.rm = TRUE
+        ) ~ "Medium HED evidence depth",
       TRUE ~ "High HED evidence depth"
     )
   ) %>%
@@ -141,7 +166,6 @@ saveRDS(
   p5_hed_aed_analysis,
   here("data", "derived", "p5_hed_aed_concordance_dat.rds")
 )
-
 
 
 # =============================================================================
@@ -185,9 +209,7 @@ message("Number of paired chemicals: ", nrow(hed_aed_dat))
 # -----------------------------------------------------------------------------
 
 calc_threshold_concordance <- function(dat, threshold_var, thresholds, label) {
-
   map_dfr(thresholds, function(thresh) {
-
     dat_thresh <- dat %>%
       filter(.data[[threshold_var]] >= thresh)
 
@@ -236,7 +258,10 @@ calc_threshold_concordance <- function(dat, threshold_var, thresholds, label) {
       pearson_r = pearson_r,
       pearson_r2 = pearson_r^2,
       spearman_rho = spearman_rho,
-      rmse_log10 = sqrt(mean((dat_thresh$log10_hed_p05 - pred)^2, na.rm = TRUE)),
+      rmse_log10 = sqrt(mean(
+        (dat_thresh$log10_hed_p05 - pred)^2,
+        na.rm = TRUE
+      )),
       median_abs_log10_diff = median(
         abs(dat_thresh$log10_hed_p05 - dat_thresh$log10_aed_p05),
         na.rm = TRUE
@@ -253,7 +278,19 @@ calc_threshold_concordance <- function(dat, threshold_var, thresholds, label) {
 # Adjust these if your distributions suggest better cut points.
 
 endpoint_thresholds <- c(
-  0, 5, 10, 25, 50, 75, 100, 125, 150, 175, 200, 225, 250
+  0,
+  5,
+  10,
+  25,
+  50,
+  75,
+  100,
+  125,
+  150,
+  175,
+  200,
+  225,
+  250
 )
 
 endpoint_thresholds <- endpoint_thresholds[
@@ -261,11 +298,24 @@ endpoint_thresholds <- endpoint_thresholds[
 ]
 
 pct_active_thresholds <- c(
-  0, 1, 2.5, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50
+  0,
+  1,
+  2.5,
+  5,
+  10,
+  15,
+  20,
+  25,
+  30,
+  35,
+  40,
+  45,
+  50
 )
 
 pct_active_thresholds <- pct_active_thresholds[
-  pct_active_thresholds <= max(hed_aed_dat$pct_assay_endpoints_active, na.rm = TRUE)
+  pct_active_thresholds <=
+    max(hed_aed_dat$pct_assay_endpoints_active, na.rm = TRUE)
 ]
 
 # -----------------------------------------------------------------------------
@@ -304,13 +354,13 @@ plot_dat <- threshold_concordance %>%
     names_to = "metric",
     values_to = "value"
   ) %>%
-mutate(
-  metric = recode(
-    metric,
-    pearson_r2 = "Pearson R²",
-    spearman_rho = "Spearman rho"
+  mutate(
+    metric = recode(
+      metric,
+      pearson_r2 = "Pearson R²",
+      spearman_rho = "Spearman rho"
+    )
   )
-)
 
 p_threshold_concordance <- ggplot(
   plot_dat,
@@ -340,7 +390,7 @@ p_threshold_concordance <- ggplot(
     show.legend = FALSE
   ) +
   facet_wrap(
-    ~ threshold_type,
+    ~threshold_type,
     scales = "free_x"
   ) +
   scale_color_manual(
@@ -404,7 +454,7 @@ r2plot <- ggplot(
     seed = 123
   ) +
   facet_wrap(
-    ~ threshold_type,
+    ~threshold_type,
     scales = "free_x"
   ) +
   labs(
@@ -420,7 +470,7 @@ r2plot <- ggplot(
 r2plot
 
 ggsave(
-  here("outputs","figures", "hed_aed_threshold_concordance.png"),
+  here("outputs", "figures", "hed_aed_threshold_concordance.png"),
   r2plot,
   width = 11,
   height = 7,
@@ -478,5 +528,217 @@ cor.test(
 cor.test(
   log10(p5_hed_aed_analysis$hed_p05),
   log10(p5_hed_aed_analysis$p5_aed_ac50_sumcl50),
+  method = "spearman"
+)
+
+#=============================================================================
+# Sensitivity analysis:
+# Require at least 5 HED values contributing to HED p05
+#=============================================================================
+
+hed_n5 <- p5_hed_aed_analysis %>%
+  filter(n_hed_values >= 5)
+
+message(
+  "Number of paired chemicals with >=5 HED values: ",
+  nrow(hed_n5)
+)
+
+
+#-----------------------------------------------------------------------------
+# Linear model
+#-----------------------------------------------------------------------------
+
+m_hed_n5 <- lm(
+  log10_hed_p05 ~ log10_aed_p05,
+  data = hed_n5
+)
+
+summary(m_hed_n5)
+
+summary(m_hed_n5)$r.squared
+
+
+#-----------------------------------------------------------------------------
+# Correlations
+#-----------------------------------------------------------------------------
+
+cor.test(
+  hed_n5$log10_hed_p05,
+  hed_n5$log10_aed_p05,
+  method = "pearson"
+)
+
+cor.test(
+  hed_n5$log10_hed_p05,
+  hed_n5$log10_aed_p05,
+  method = "spearman"
+)
+
+
+#-----------------------------------------------------------------------------
+# Concordance / absolute agreement
+#-----------------------------------------------------------------------------
+
+hed_n5_summary <- hed_n5 %>%
+  summarise(
+    n = n(),
+
+    pearson_r = cor(
+      log10_aed_p05,
+      log10_hed_p05,
+      method = "pearson"
+    ),
+
+    pearson_r2 = pearson_r^2,
+
+    spearman_rho = cor(
+      log10_aed_p05,
+      log10_hed_p05,
+      method = "spearman"
+    ),
+
+    median_log10_difference = median(
+      log10_diff_hed_minus_aed
+    ),
+
+    median_abs_log10_difference = median(
+      abs_log10_diff
+    ),
+
+    median_fold_difference = median(
+      fold_difference
+    ),
+
+    pct_within_1_log10 = 100 *
+      mean(
+        abs_log10_diff <= 1
+      )
+  )
+
+print(hed_n5_summary)
+
+calc_overall_concordance <- function(dat, analysis) {
+  pearson_r <- cor(
+    dat$log10_aed_p05,
+    dat$log10_hed_p05,
+    method = "pearson"
+  )
+
+  tibble(
+    analysis = analysis,
+    n = nrow(dat),
+
+    pearson_r = pearson_r,
+    pearson_r2 = pearson_r^2,
+
+    spearman_rho = cor(
+      dat$log10_aed_p05,
+      dat$log10_hed_p05,
+      method = "spearman"
+    ),
+
+    median_log10_difference = median(
+      dat$log10_diff_hed_minus_aed
+    ),
+
+    median_abs_log10_difference = median(
+      dat$abs_log10_diff
+    ),
+
+    median_fold_difference = median(
+      dat$fold_difference
+    ),
+
+    pct_within_1_log10 = 100 *
+      mean(
+        dat$abs_log10_diff <= 1
+      )
+  )
+}
+
+
+hed_depth_sensitivity <- bind_rows(
+  calc_overall_concordance(
+    p5_hed_aed_analysis,
+    "Primary: >=1 HED value"
+  ),
+
+  calc_overall_concordance(
+    p5_hed_aed_analysis %>%
+      filter(n_hed_values >= 5),
+    "Sensitivity: >=5 HED values"
+  )
+)
+
+print(hed_depth_sensitivity, width = Inf)
+
+hed_aed_dat_n5 <- hed_aed_dat %>%
+  filter(n_hed_values >= 5)
+
+
+threshold_concordance_n5 <- bind_rows(
+  calc_threshold_concordance(
+    dat = hed_aed_dat_n5,
+    threshold_var = "n_aed_ac50_sumcl50",
+    thresholds = endpoint_thresholds,
+    label = "Minimum AED endpoint count"
+  ),
+
+  calc_threshold_concordance(
+    dat = hed_aed_dat_n5,
+    threshold_var = "pct_assay_endpoints_active",
+    thresholds = pct_active_thresholds,
+    label = "Minimum % active endpoints"
+  )
+) %>%
+  mutate(
+    hed_requirement = ">=5 HED values"
+  )
+
+threshold_concordance_primary <- threshold_concordance %>%
+  mutate(
+    hed_requirement = ">=1 HED value"
+  )
+
+threshold_concordance_sensitivity <- bind_rows(
+  threshold_concordance_primary,
+  threshold_concordance_n5
+)
+
+print(threshold_concordance_sensitivity)
+
+high_conf <- p5_hed_aed_analysis %>%
+  filter(
+    pct_assay_endpoints_active >= 25,
+    n_aed_ac50_sumcl50 >= 150
+  )
+
+high_conf_hed_n5 <- p5_hed_aed_analysis %>%
+  filter(
+    pct_assay_endpoints_active >= 25,
+    n_aed_ac50_sumcl50 >= 150,
+    n_hed_values >= 5
+  )
+
+nrow(high_conf_hed_n5)
+
+m_high_conf_hed_n5 <- lm(
+  log10_hed_p05 ~ log10_aed_p05,
+  data = high_conf_hed_n5
+)
+
+summary(m_high_conf_hed_n5)
+summary(m_high_conf_hed_n5)$r.squared
+
+cor.test(
+  high_conf_hed_n5$log10_hed_p05,
+  high_conf_hed_n5$log10_aed_p05,
+  method = "pearson"
+)
+
+cor.test(
+  high_conf_hed_n5$log10_hed_p05,
+  high_conf_hed_n5$log10_aed_p05,
   method = "spearman"
 )

@@ -131,21 +131,18 @@ sector_annot <- rocks %>%
     # A chemical has a primary sector if at least one primary flag is TRUE
     has_primary_sector = if_any(
       all_of(primary_sector_cols),
-      ~ .x
+      ~.x
     ),
 
     # Fallback categories are used only when there is no primary sector
-    biomonitoring_unknown =
-      !has_primary_sector &
+    biomonitoring_unknown = !has_primary_sector &
       biomonitoring,
 
-    env_monitoring_unknown =
-      !has_primary_sector &
+    env_monitoring_unknown = !has_primary_sector &
       env_monitoring,
 
     # Fully unknown means no primary sector and no fallback sector
-    unknown =
-      !has_primary_sector &
+    unknown = !has_primary_sector &
       !biomonitoring &
       !env_monitoring
   ) %>%
@@ -214,7 +211,9 @@ if ("inchikey_xwalk" %in% names(ghs_raw_joined)) {
 }
 
 if (!"inchikey" %in% names(ghs_raw_joined)) {
-  stop("No inchikey column was available after joining ghs_results.csv to cids.txt.")
+  stop(
+    "No inchikey column was available after joining ghs_results.csv to cids.txt."
+  )
 }
 
 ghs_base <- ghs_raw_joined %>%
@@ -242,25 +241,37 @@ message(
 # -----------------------------------------------------------------------------
 
 map_ghs_health_category <- function(h_code) {
-
   case_when(
-
     # Acute Toxicity
-    h_code %in% c(
-      "H300", "H301", "H302",
-      "H310", "H311", "H312",
-      "H330", "H331", "H332", "H333"
-    ) ~ "Acute toxicity",
+    h_code %in%
+      c(
+        "H300",
+        "H301",
+        "H302",
+        "H310",
+        "H311",
+        "H312",
+        "H330",
+        "H331",
+        "H332",
+        "H333"
+      ) ~ "Acute toxicity",
 
     # Skin Corrosion / Irritation
-    h_code %in% c(
-      "H314", "H315", "H316"
-    ) ~ "Skin corrosion / irritation",
+    h_code %in%
+      c(
+        "H314",
+        "H315",
+        "H316"
+      ) ~ "Skin corrosion / irritation",
 
     # Serious Eye Damage / Eye Irritation
-    h_code %in% c(
-      "H318", "H319", "H320"
-    ) ~ "Serious eye damage / eye irritation",
+    h_code %in%
+      c(
+        "H318",
+        "H319",
+        "H320"
+      ) ~ "Serious eye damage / eye irritation",
 
     # Respiratory Sensitization
     h_code == "H334" ~ "Respiratory sensitization",
@@ -269,9 +280,11 @@ map_ghs_health_category <- function(h_code) {
     h_code == "H317" ~ "Skin sensitization",
 
     # Germ Cell Mutagenicity
-    h_code %in% c(
-      "H340", "H341"
-    ) ~ "Germ cell mutagenicity",
+    h_code %in%
+      c(
+        "H340",
+        "H341"
+      ) ~ "Germ cell mutagenicity",
 
     # Carcinogenicity
     str_detect(h_code, "^H350[A-Za-z]*$") |
@@ -283,15 +296,20 @@ map_ghs_health_category <- function(h_code) {
       h_code == "H362" ~ "Reproductive toxicity",
 
     # STOT Single Exposure
-    h_code %in% c(
-      "H335", "H336",
-      "H370", "H371"
-    ) ~ "STOT single exposure",
+    h_code %in%
+      c(
+        "H335",
+        "H336",
+        "H370",
+        "H371"
+      ) ~ "STOT single exposure",
 
     # STOT Repeated Exposure
-    h_code %in% c(
-      "H372", "H373"
-    ) ~ "STOT-RE",
+    h_code %in%
+      c(
+        "H372",
+        "H373"
+      ) ~ "STOT-RE",
 
     # Aspiration Hazard
     h_code == "H304" ~ "Aspiration hazard",
@@ -301,9 +319,7 @@ map_ghs_health_category <- function(h_code) {
 }
 
 map_ghs_signal_word <- function(h_code) {
-
   case_when(
-
     # Acute toxicity
     h_code %in% c("H300", "H301", "H310", "H311", "H330", "H331") ~ "Danger",
     h_code %in% c("H302", "H312", "H332") ~ "Warning",
@@ -660,17 +676,17 @@ p_sector_heatmap <- ggplot(
     drop = FALSE
   ) +
 
-scale_fill_gradientn(
-  colours = c(
-    "#F7FBFF",
-    "#0a91ff52",
-    "#0eaffab4",
-    "#0A32FF"
-  ),
-  name = "Percent of sector",
-  breaks = pretty(c(0, max_pct), n = 3),
-  labels = scales::label_percent(accuracy = 1)
-)+
+  scale_fill_gradientn(
+    colours = c(
+      "#F7FBFF",
+      "#0a91ff52",
+      "#0eaffab4",
+      "#0A32FF"
+    ),
+    name = "Percent of sector",
+    breaks = pretty(c(0, max_pct), n = 3),
+    labels = scales::label_percent(accuracy = 1)
+  ) +
   labs(
     x = NULL,
     y = NULL
@@ -708,3 +724,100 @@ ggsave(
   height = 6,
   dpi = 300
 )
+
+# -----------------------------------------------------------------------------
+# DRSV vs chronic GHS health-statement overlap
+# -----------------------------------------------------------------------------
+
+tam <- readRDS(
+  here("data", "derived", "tam.rds")
+)
+
+ghs_retrieved_chems <- ghs_base %>%
+  distinct(cichem_id)
+
+drsv_chems <- tam %>%
+  filter(
+    toxval_type_supercategory == "Dose Response Summary Value",
+    !is.na(cichem_id),
+    cichem_id != ""
+  ) %>%
+  distinct(cichem_id) %>%
+  semi_join(
+    ghs_retrieved_chems,
+    by = "cichem_id"
+  )
+
+
+chronic_ghs_chems <- ghs_health %>%
+  filter(
+    ghs_health_category %in%
+      c(
+        "Germ cell mutagenicity",
+        "Carcinogenicity",
+        "Reproductive toxicity",
+        "STOT-RE"
+      )
+  ) %>%
+  distinct(cichem_id)
+
+
+drsv_ghs_overlap <- full_join(
+  drsv_chems %>%
+    mutate(has_drsv = TRUE),
+  chronic_ghs_chems %>%
+    mutate(has_chronic_ghs = TRUE),
+  by = "cichem_id"
+) %>%
+  mutate(
+    has_drsv = replace_na(has_drsv, FALSE),
+    has_chronic_ghs = replace_na(has_chronic_ghs, FALSE),
+    overlap_group = case_when(
+      has_drsv & has_chronic_ghs ~ "Both",
+      has_drsv ~ "DRSV only",
+      has_chronic_ghs ~ "Chronic GHS only"
+    )
+  )
+
+drsv_ghs_overlap %>%
+  count(overlap_group)
+
+overlap_summary <- tibble(
+  n_drsv = nrow(drsv_chems),
+  n_chronic_ghs = nrow(chronic_ghs_chems),
+  n_both = nrow(inner_join(
+    drsv_chems,
+    chronic_ghs_chems,
+    by = "cichem_id"
+  ))
+) %>%
+  mutate(
+    pct_drsv_with_chronic_ghs = 100 * n_both / n_drsv,
+    pct_chronic_ghs_with_drsv = 100 * n_both / n_chronic_ghs
+  )
+
+print(overlap_summary)
+
+ghs_drsv_by_category <- ghs_health %>%
+  filter(
+    ghs_health_category %in%
+      c(
+        "Germ cell mutagenicity",
+        "Carcinogenicity",
+        "Reproductive toxicity",
+        "STOT-RE"
+      )
+  ) %>%
+  distinct(cichem_id, ghs_health_category) %>%
+  mutate(
+    has_drsv = cichem_id %in% drsv_chems$cichem_id
+  ) %>%
+  group_by(ghs_health_category) %>%
+  summarise(
+    n_ghs = n_distinct(cichem_id),
+    n_with_drsv = n_distinct(cichem_id[has_drsv]),
+    pct_with_drsv = 100 * n_with_drsv / n_ghs,
+    .groups = "drop"
+  )
+
+ghs_drsv_by_category
